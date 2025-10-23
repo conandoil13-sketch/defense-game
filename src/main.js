@@ -93,13 +93,13 @@ function getBackmostCombatIdx(lane) { // 2→1→0
 /* ===== 적 모델/스폰 ===== */
 function makeEnemy(baseType, variant, rng) {
     let hp = 5, dmg = 1, badge = '';
-    if (baseType === 'basic') { hp = Math.floor(4 + rng() * 4); dmg = 1; }
-    if (baseType === 'elite') { hp = Math.floor(9 + rng() * 6); dmg = (rng() < 0.5 ? 2 : 3); badge = 'elite'; }
-    if (baseType === 'boss') { hp = Math.floor(22 + rng() * 10); dmg = Math.floor(3 + rng() * 3); badge = 'boss'; }
+    if (baseType === 'basic') { hp = Math.floor(3 + rng() * 4); dmg = 1; }
+    if (baseType === 'elite') { hp = Math.floor(7 + rng() * 6); dmg = (rng() < 0.5 ? 2 : 3); badge = 'elite'; }
+    if (baseType === 'boss') { hp = Math.floor(20 + rng() * 10); dmg = Math.floor(3 + rng() * 3); badge = 'boss'; }
 
-    if (variant === 'tank') { hp = Math.floor(hp * 1.35); dmg = Math.max(1, Math.floor(dmg * 0.8)); }
-    else if (variant === 'skirm') { hp = Math.max(3, Math.floor(hp * 0.75)); dmg = Math.ceil(dmg * 1.5); }
-    else if (variant === 'frenzy') { hp = Math.floor(hp * 0.9); dmg = dmg + 1; }
+    if (variant === 'tank') { hp = Math.floor(hp * 1.35); dmg = Math.max(1, Math.floor(dmg * 0.6)); }
+    else if (variant === 'skirm') { hp = Math.max(3, Math.floor(hp * 0.55)); dmg = Math.ceil(dmg * 1.4); }
+    else if (variant === 'frenzy') { hp = Math.floor(hp * 0.8); dmg = dmg + 1; }
 
     hp = Math.ceil(hp * state.stageMods.hpScale);
     dmg = Math.max(1, Math.round(dmg * state.stageMods.dmgScale));
@@ -255,7 +255,7 @@ function applyMainEffect(kind, col, base, p, combatIdx) {
         const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
         if (idx >= 0) {
             const e = lane.queue[idx];
-            if (e) { const v = (p.rng() < 0.25) ? 2 : 1; e.dot = { value: v, turns: 2 }; log(`라틴 DOT: 열${col + 1} 슬롯${idx} DOT${v}x2T`); }
+            if (e) { const v = (p.rng() < 0.40) ? 2 : 1; e.dot = { value: v, turns: 2 }; log(`라틴 DOT: 열${col + 1} 슬롯${idx} DOT${v}x2T`); }
         }
 
     } else if (kind === 'Han') {
@@ -291,8 +291,8 @@ function applySubEffect(kind, col, base, p, combatIdx) {
     const lane = state.lanes[col];
 
     if (kind === 'Hangul') {
-        // 50% 확률로 타깃 제외 같은 열 모든 적에게 +1
-        if (p.rng() < 0.5) {
+        // 60% 확률로 타깃 제외 같은 열 모든 적에게 +1
+        if (p.rng() < 0.6) {
             for (let i = 0; i < ROWS; i++) {
                 if (i === combatIdx) continue;
                 const e = lane.queue[i];
@@ -301,9 +301,9 @@ function applySubEffect(kind, col, base, p, combatIdx) {
         }
 
     } else if (kind === 'Latin') {
-        // 12% 확률 DOT1x2T
+        // 30% 확률 DOT1x2T
         const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
-        if (idx >= 0 && p.rng() < 0.12) {
+        if (idx >= 0 && p.rng() < 0.30) {
             const e = lane.queue[idx]; if (e) { e.dot = { value: 1, turns: 2 }; log(`보조(라틴) DOT1x2T (12%) @열${col + 1}/슬롯${idx}`); }
         }
 
@@ -388,8 +388,8 @@ function toNextStage() {
     state.stage++;
     state.round = 1;
 
-    state.stageMods.hpScale = 1 + (state.stage - 1) * 0.12;
-    state.stageMods.dmgScale = 1 + (state.stage - 1) * 0.08;
+    state.stageMods.hpScale = 1 + (state.stage - 1) * 0.08;
+    state.stageMods.dmgScale = 1 + (state.stage - 1) * 0.06;
     state.stageMods.eliteBonus = 0.05 * (state.stage - 1);
 
     state.lanes = Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false }));
