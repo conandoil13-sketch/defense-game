@@ -68,7 +68,7 @@ const ROWS = 5, COMBAT_ZONE = [0, 1, 2], QUEUE_ZONE = [3, 4];
 const state = {
     round: 1,
     coreMax: 12, core: 12,
-    energyMax: 6, energyGain: 2, energy: 2,
+    energyMax: 6, energyGain: 4, energy: 2,
     lanes: Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false })),
     // --- 턴 당 포션 2장 (생성/사용) ---
     turnPotions: [],      // 이 턴에 생성된 포션 대기열 (최대 2)
