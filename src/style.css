@@ -1,0 +1,239 @@
+/* Minimal UI */
+
+* {
+    box-sizing: border-box;
+    font-family: sans-serif
+}
+
+body {
+    margin: 0;
+    background: #fff;
+    color: #000;
+    font-size: 14px;
+    line-height: 1.4
+}
+
+h1 {
+    font-size: 16px;
+    margin: 10px 0;
+    font-weight: bold
+}
+
+.wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+    max-width: 1100px;
+    margin: 0 auto
+}
+
+@media (min-width:960px) {
+    .wrap {
+        grid-template-columns: 280px 1fr
+    }
+}
+
+.card {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px;
+    background: #fafafa
+}
+
+.row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px
+}
+
+.inputs .row input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 14px
+}
+
+.btn {
+    flex: 1;
+    padding: 8px;
+    background: #eee;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    cursor: pointer
+}
+
+.btn:hover {
+    background: #e2e2e2
+}
+
+.btn:disabled {
+    opacity: .5;
+    cursor: default
+}
+
+.btn-ghost {
+    background: #fff
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px
+}
+
+.controls.five .btn {
+    flex: 1;
+    min-width: calc(20% - 4px)
+}
+
+.mini {
+    font-size: 12px;
+    color: #555
+}
+
+.status-line {
+    font-size: 12px;
+    color: #333;
+    margin: 6px 0
+}
+
+.split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px
+}
+
+.col {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px
+}
+
+.col h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between
+}
+
+.lane {
+    display: grid;
+    grid-template-rows: repeat(5, 50px);
+    gap: 4px
+}
+
+.slot {
+    border: 1px dashed #888;
+    background: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: 12px;
+    color: #222
+}
+
+.slot.front {
+    border-style: solid;
+    border-color: #000
+}
+
+.slot.path {
+    border-style: dotted;
+    border-color: #666
+}
+
+.slot.queue {
+    border-style: dashed;
+    border-color: #888
+}
+
+.enemy {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 11px;
+    line-height: 1.1
+}
+
+.hp {
+    font-weight: bold;
+    font-size: 12px
+}
+
+.badge {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    font-size: 10px;
+    background: #fff;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    padding: 1px 3px
+}
+
+.potion {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    padding: 8px;
+    margin-top: 8px
+}
+
+.potion .title {
+    font-weight: bold;
+    font-size: 13px
+}
+
+.pill {
+    display: inline-block;
+    border: 1px solid #bbb;
+    border-radius: 99px;
+    padding: 2px 8px;
+    font-size: 12px;
+    margin-right: 4px
+}
+
+.flex {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px
+}
+
+.log {
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px;
+    background: #fff;
+    max-height: 200px;
+    overflow: auto
+}
+
+.meter {
+    height: 8px;
+    background: #ddd;
+    border-radius: 4px;
+    overflow: hidden
+}
+
+.meter>div {
+    height: 100%;
+    background: #888
+}

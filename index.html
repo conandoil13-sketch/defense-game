@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="./src/style.css">
+    <title>Title</title>
+</head>
+
+<body>
+
+    <div class="wrap">
+        <!-- 좌측: 입력/상태 -->
+        <div class="card inputs">
+            <h1>OAL 프로토타입</h1>
+
+            <div class="row"><input id="w1" placeholder="단어 1 (예: 겨울)" autocomplete="off" /></div>
+            <div class="row"><input id="w2" placeholder="단어 2 (예: storm)" autocomplete="off" /></div>
+            <div class="row"><input id="w3" placeholder="단어 3 (예: 石)" autocomplete="off" /></div>
+
+            <div class="row controls">
+                <button id="genBtn" class="btn">포션 생성 (턴당 2)</button>
+                <button id="turnBtn" class="btn">다음 턴 ▶</button>
+                <button id="resetBtn" class="btn btn-ghost">리셋</button>
+            </div>
+
+            <div id="langInfo" class="status-line">감지 대기…</div>
+
+            <div class="split">
+                <div>
+                    <div>라운드 / 코어 HP</div>
+                    <div class="row">
+                        <div id="roundTxt" class="pill">라운드 1</div>
+                        <div>코어 <span id="coreTxt">12</span></div>
+                    </div>
+                    <div class="meter">
+                        <div id="coreBar" style="width:100%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div>에너지 (턴당 +2, 상한 6)</div>
+                    <div class="row">
+                        <div id="energyTxt" class="pill">에너지 2 / 6</div>
+                    </div>
+                    <div class="meter">
+                        <div id="energyBar" style="width:33%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="potionView" class="potion" style="display:none">
+                <div class="title">⚗️ 생성된 포션</div>
+                <div id="potionName" class="mini"></div>
+                <div class="flex">
+                    <span id="pMain" class="pill"></span>
+                    <span id="pSub" class="pill"></span>
+                    <span id="pType" class="pill"></span>
+                    <span id="pCost" class="pill"></span>
+                    <span id="pDmg" class="pill"></span>
+                </div>
+                <div id="potionDesc" class="mini" style="margin-top:6px"></div>
+                <div class="controls five">
+                    <button class="btn" data-cast="0">열 1</button>
+                    <button class="btn" data-cast="1">열 2</button>
+                    <button class="btn" data-cast="2">열 3</button>
+                    <button class="btn" data-cast="3">열 4</button>
+                    <button class="btn" data-cast="4">열 5</button>
+                </div>
+                <div class="mini">※ 포션은 턴당 2개만 생성/사용</div>
+            </div>
+
+            <div style="margin-top:8px">
+                <div>전투 로그</div>
+                <div id="log" class="log"></div>
+            </div>
+        </div>
+
+        <!-- 우측: 보드 -->
+        <div class="card">
+            <h1>보드 (5열 × 5행: Front/Path1/Path2/Queue1/Queue2)</h1>
+            <div id="grid" class="grid"></div>
+        </div>
+    </div>
+
+
+
+
+
+
+
+
+
+
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+
+</html>
