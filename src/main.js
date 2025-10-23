@@ -16,33 +16,24 @@ function isAsciiPunctOrSpace(cp) {
         (cp >= 0x0000 && cp <= 0x002F) || // 제어/기호/숫자 앞
         (cp >= 0x003A && cp <= 0x0040) || // : ; < = > ? @
         (cp >= 0x005B && cp <= 0x0060) || // [ \ ] ^ _ `
-        (cp >= 0x007B && cp <= 0x007E) || // { | } ~  ← 여기 때문에 '|' 오탐 방지
+        (cp >= 0x007B && cp <= 0x007E) || // { | } ~
         (cp === 0x00A0)                 // NBSP
     );
 }
 function isLatinLetter(cp) {
-    // A-Z, a-z
-    if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A)) return true;
-    // 확장 라틴 (문자만)
-    if ((cp >= 0x00C0 && cp <= 0x00FF) || (cp >= 0x0100 && cp <= 0x017F) || (cp >= 0x0180 && cp <= 0x024F) || (cp >= 0x1E00 && cp <= 0x1EFF)) return true;
+    if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A)) return true; // A-Z, a-z
+    if ((cp >= 0x00C0 && cp <= 0x00FF) || (cp >= 0x0100 && cp <= 0x017F) || (cp >= 0x0180 && cp <= 0x024F) || (cp >= 0x1E00 && cp <= 0x1EFF)) return true; // 확장 라틴(문자만)
     return false;
 }
 function scriptOf(cp) {
-    // 공통 제외
     if (isAsciiPunctOrSpace(cp)) return null;
     if (cp >= 0x0030 && cp <= 0x0039) return null; // 0-9
     if (cp >= 0x2000 && cp <= 0x206F) return null; // General Punctuation
-
-    // 한글
     if ((cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F)) return 'Hangul';
-    // 라틴(문자만)
     if (isLatinLetter(cp)) return 'Latin';
-    // 한자
     if ((cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0x3400 && cp <= 0x4DBF)) return 'Han';
-    // 히라가나 / 가타카나
     if (cp >= 0x3040 && cp <= 0x309F) return 'Hiragana';
     if (cp >= 0x30A0 && cp <= 0x30FF) return 'Katakana';
-
     return 'Other';
 }
 function analyzeScripts(words) {
@@ -68,12 +59,12 @@ const ROWS = 5, COMBAT_ZONE = [0, 1, 2], QUEUE_ZONE = [3, 4];
 const state = {
     round: 1,
     coreMax: 12, core: 12,
-    energyMax: 6, energyGain: 3, energy: 2,
+    energyMax: 6, energyGain: 3, energy: 2,   // ← 여기 값만 바꿔도 됨 (로그는 실제 증가량 표시)
     lanes: Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false })),
     // --- 턴 당 포션 2장 (생성/사용) ---
     turnPotions: [],      // 이 턴에 생성된 포션 대기열 (최대 2)
     usedThisTurn: 0,      // 이 턴에 사용한 장수 (최대 2)
-    potion: null,         // 현재 화면에 표시/사용할 포션(= turnPotions[0] 또는 null)
+    potion: null,         // 현재 표시/사용 포션(= turnPotions[0] 또는 null)
 };
 
 /* ===== 타깃 유틸 ===== */
@@ -206,7 +197,6 @@ function castPotionOnColumn(p, col) {
 }
 function afterCastConsume() {
     state.usedThisTurn++;
-    // 현재 포션을 큐에서 제거하고 다음 포션을 보여줌
     if (state.turnPotions.length > 0) state.turnPotions.shift();
     state.potion = state.turnPotions[0] || null;
 }
@@ -260,14 +250,19 @@ function nextTurn() {
     const spawnCount = (rng() < 0.6 ? 1 : 2);
     const cols = [0, 1, 2, 3, 4].sort(() => rng() < 0.5 ? -1 : 1).slice(0, spawnCount);
     for (const c of cols) spawnEnemyForLane(state.lanes[c], rng, (state.round >= 10 ? 10 : state.round));
-    state.energy = clamp(state.energy + state.energyGain, 0, state.energyMax);
 
-    // 턴 리셋: 사용/생성 카운터
+    // ▶ 에너지 '실제 증가량' 계산 후 표시 (energyGain이 3이면 +3으로 보임)
+    const before = state.energy;
+    state.energy = clamp(state.energy + state.energyGain, 0, state.energyMax);
+    const gained = state.energy - before;
+
+    // 턴 리셋
     state.usedThisTurn = 0;
     state.turnPotions.length = 0;
     state.potion = null;
 
-    updateUI(); log(`— 턴 시작: 전진/스폰 완료, 에너지 +${state.energyGain} (이 턴 최대 2장 사용 가능)`);
+    updateUI();
+    log(`— 턴 시작: 전진/스폰 완료, 에너지 +${gained} (설정 ${state.energyGain}) · 이 턴 최대 2장 사용 가능`);
 }
 function endOfTurnResolve() {
     enemyAttackPhase(); dotResolvePhase(); state.round++; updateUI();
@@ -330,24 +325,22 @@ function updateTopBars() {
     document.getElementById('energyTxt').textContent = `에너지 ${state.energy} / ${state.energyMax}`;
     document.getElementById('energyBar').style.width = (state.energy / state.energyMax * 100) + '%';
 }
+
+/* ▶ 패널 버튼 캐스팅 바인딩 포함 */
 function showPotion(p) {
     const box = document.getElementById('potionView');
     if (!box) return;
 
-    // 공통: 이 턴 남은 사용 가능 장수
     const playsLeft = Math.max(0, 2 - state.usedThisTurn);
-
-    // 헬퍼: 패널 버튼 활성/비활성 + 핸들러 바인딩
     function wirePanelButtons(enabled) {
         box.querySelectorAll('[data-cast]').forEach(btn => {
             const col = parseInt(btn.dataset.cast, 10);
-            btn.textContent = enabled ? `열 ${col + 1}` : `열 ${col + 1}`;
+            btn.textContent = `열 ${col + 1}`;
             btn.disabled = !enabled;
             btn.onclick = enabled ? (() => castPotionOnColumn(state.potion, col)) : null;
         });
     }
 
-    // 포션이 없을 때도 패널은 보여주되, 버튼은 잠금
     if (!p) {
         box.style.display = 'block';
         document.getElementById('potionName').textContent = '(포션 없음)';
@@ -361,7 +354,6 @@ function showPotion(p) {
         return;
     }
 
-    // 포션 정보 표시
     box.style.display = 'block';
     const waiting = state.turnPotions.length > 1 ? ` (대기 ${state.turnPotions.length - 1}장)` : '';
     document.getElementById('potionName').textContent = makeName(p.main, p.sub) + waiting;
@@ -372,10 +364,10 @@ function showPotion(p) {
     document.getElementById('pDmg').textContent = `기본피해: ${p.baseDmg}`;
     document.getElementById('potionDesc').textContent = p.desc;
 
-    // 남은 장수/에너지 상태에 따라 버튼 활성화
     const canPlay = !!state.potion && playsLeft > 0 && state.energy >= p.cost;
     wirePanelButtons(canPlay);
 }
+
 function updateLangDebug() {
     const w1 = document.getElementById('w1').value || '';
     const w2 = document.getElementById('w2').value || '';
@@ -399,7 +391,6 @@ document.getElementById('genBtn').onclick = () => {
     if (!p) { log('유효한 입력이 없습니다.'); return; }
 
     state.turnPotions.push(p);
-    // 현재 표시 포션이 없으면 꺼내서 세팅
     if (!state.potion) state.potion = state.turnPotions[0];
 
     showPotion(state.potion);
@@ -413,7 +404,7 @@ document.getElementById('resetBtn').onclick = resetGame;
 
 /* ===== 초기화 ===== */
 function resetGame() {
-    state.round = 1; state.core = state.coreMax; state.energy = state.energyGain;
+    state.round = 1; state.core = state.coreMax; state.energy = state.energyGain; // 시작 에너지는 gain 만큼
     state.lanes = Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false }));
     state.turnPotions.length = 0; state.usedThisTurn = 0;
     state.potion = null;
