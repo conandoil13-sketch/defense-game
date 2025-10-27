@@ -57,6 +57,16 @@ function analyzeScripts(words) {
     return { counts, set, hasOther: counts.Other > 0, joined };
 }
 const detectJP = (set) => set.has('Hiragana') || set.has('Katakana');
+/* ===== 포션 한도/사용 횟수 상수 & 헬퍼 ===== */
+const BASE_POTION_CAP = 2;          // 턴당 생성/보유 가능 기본치
+const BASE_PLAYS_PER_TURN = 2;      // 턴당 사용 가능 기본치
+
+function getPotionCap() {
+    return BASE_POTION_CAP + (state.potionCapBonus || 0);
+}
+function getPlaysPerTurn() {
+    return BASE_PLAYS_PER_TURN + (state.potionPlayBonus || 0);
+}
 
 /* ===== 상태 ===== */
 const MAX_COLS = 5;
@@ -74,6 +84,9 @@ const state = {
     coreMax: 12, core: 12,
 
     energyMax: 6, energyGain: 4, energy: 4, // 턴당 +4
+    potionCapBonus: 0,   // 유물 등으로 증가하는 '턴당 보유/생성 한도' 보너스
+    potionPlayBonus: 0,  // 유물 등으로 증가하는 '턴당 사용 횟수' 보너스
+
 
     lanes: Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false })),
 
@@ -394,7 +407,10 @@ function makeSludge(joined, reason) {
 /* ===== 포션 사용 ===== */
 function castPotionOnColumn(p, col) {
     if (!p) return;
-    if (state.usedThisTurn >= 2) { log('이 턴에 더 이상 카드를 사용할 수 없습니다 (최대 2장).'); return; }
+    if (state.usedThisTurn >= getPlaysPerTurn()) {
+        log(`이 턴에 더 이상 카드를 사용할 수 없습니다 (최대 ${getPlaysPerTurn()}장).`);
+        return;
+    }
     if (state.energy < p.cost) { log(`에너지 부족: 필요 ${p.cost}`); return; }
     state.energy = Math.max(0, state.energy - p.cost);
 
@@ -547,8 +563,9 @@ function renderGrid() {
 
         const ctr = document.createElement('div'); ctr.className = 'controls';
         const btn = document.createElement('button'); btn.className = 'btn';
-        btn.textContent = (state.usedThisTurn < 2 ? `여기에 사용 (${2 - state.usedThisTurn}장 남음)` : `사용 불가`);
-        btn.disabled = !state.potion || state.usedThisTurn >= 2 || state.energy < (state.potion ? state.potion.cost : 999);
+        const playsLeftGrid = Math.max(0, getPlaysPerTurn() - state.usedThisTurn);
+        btn.textContent = (playsLeftGrid > 0 ? `여기에 사용 (${playsLeftGrid}장 남음)` : `사용 불가`);
+        btn.disabled = !state.potion || playsLeftGrid <= 0 || state.energy < (state.potion ? state.potion.cost : 999);
         btn.onclick = () => castPotionOnColumn(state.potion, c);
         ctr.appendChild(btn);
 
@@ -646,7 +663,22 @@ const RELIC_POOL = [
             state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
             log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 포션 기본피해 +${dmg}`);
         }
+    },
+    {
+        id: 'potion_bandolier',
+        name: '증강 밴돌리어',
+        desc: '턴당 생성 한도 +1, 사용 횟수 +1',
+        apply(base, tuneName, tune) {
+            // 고정 +1 (가변/가중치 없음)
+            state.potionCapBonus = (state.potionCapBonus || 0) + 1;
+            state.potionPlayBonus = (state.potionPlayBonus || 0) + 1;
+
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 생성 한도 +1, 사용 +1 → 현재 생성 ${getPotionCap()}개, 사용 ${getPlaysPerTurn()}장`);
+        }
     }
+
+
 ];
 
 // 후보 3개(결정적) 생성
@@ -740,7 +772,7 @@ function showPotion(p) {
     const box = document.getElementById('potionView');
     if (!box) return;
 
-    const playsLeft = Math.max(0, 2 - state.usedThisTurn);
+    const playsLeft = Math.max(0, getPlaysPerTurn() - state.usedThisTurn);
 
     function wirePanelButtons(enabled) {
         box.querySelectorAll('[data-cast]').forEach(btn => {
@@ -791,7 +823,10 @@ function updateUI() { renderGrid(); updateTopBars(); showPotion(state.potion); }
 
 /* ===== 이벤트 ===== */
 document.getElementById('genBtn').onclick = () => {
-    if (state.turnPotions.length >= 2) { log('이 턴에 더 이상 포션을 생성할 수 없습니다 (최대 2개).'); return; }
+    if (state.turnPotions.length >= getPotionCap()) {
+        log(`이 턴에 더 이상 포션을 생성할 수 없습니다 (최대 ${getPotionCap()}개).`);
+        return;
+    }
     const p = potionFrom([
         document.getElementById('w1').value || '',
         document.getElementById('w2').value || '',
@@ -802,7 +837,7 @@ document.getElementById('genBtn').onclick = () => {
     state.turnPotions.push(p);
     if (!state.potion) state.potion = state.turnPotions[0];
     showPotion(state.potion);
-    log(`포션 생성(${state.turnPotions.length}/2): ${makeName(p.main, p.sub)} | 코스트 ${p.cost} | 기본피해 ${p.baseDmg}`);
+    log(`포션 생성(${state.turnPotions.length}/${getPotionCap()}): ${makeName(p.main, p.sub)} | 코스트 ${p.cost} | 기본피해 ${p.baseDmg}`);
     updateUI();
 };
 document.getElementById('turnBtn').onclick = () => { endOfTurnResolve(); nextTurn(); };
@@ -830,7 +865,7 @@ document.getElementById('resetBtn').onclick = resetGame;
         // 화면엔 "플레이어가 실제로 획득한 유물(id가 풀에 등록된 것)"만 보여주자.
         const visible = state.relics.filter(r => {
             // 풀 유물 id 집합과 매칭
-            return ['core_cap', 'overclock', 'swift_path', 'hardened_shell', 'distill'].includes(r.id);
+            return ['core_cap', 'overclock', 'swift_path', 'hardened_shell', 'distill', 'potion_bandolier'].includes(r.id);
         });
 
         for (const r of visible) {
@@ -852,7 +887,8 @@ document.getElementById('resetBtn').onclick = resetGame;
                         : r.id === 'swift_path' ? '즉시 에너지'
                             : r.id === 'hardened_shell' ? '스테이지 시작 회복'
                                 : r.id === 'distill' ? '포션 기본피해 +'
-                                    : '유물';
+                                    : r.id === 'potion_bandolier' ? '생성/사용 +1'
+                                        : '유물';
 
             left.appendChild(name);
             left.appendChild(meta);
@@ -905,7 +941,6 @@ function resetGame() {
     state.turnPotions.length = 0; state.usedThisTurn = 0; state.potion = null;
     state._bossSpawnedThisStage = false;
     state._bossRelicOfferedThisStage = false;
-    // 보유 유물은 유지(로그라이크 감성). 초기화 원하면 state.relics=[]; 추가.
     document.getElementById('log').textContent = '';
     updateLangDebug(); updateUI(); nextTurn();
 }
