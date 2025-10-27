@@ -1,8 +1,11 @@
-/* Minimal UI */
+/* =========================
+   OAL Prototype — Clean UI (Unified)
+   ========================= */
 
+/* 기본 */
 * {
     box-sizing: border-box;
-    font-family: sans-serif
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", sans-serif;
 }
 
 body {
@@ -10,27 +13,28 @@ body {
     background: #fff;
     color: #000;
     font-size: 14px;
-    line-height: 1.4
+    line-height: 1.4;
 }
 
 h1 {
     font-size: 16px;
     margin: 10px 0;
-    font-weight: bold
+    font-weight: bold;
 }
 
+/* 레이아웃 */
 .wrap {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
     padding: 10px;
     max-width: 1100px;
-    margin: 0 auto
+    margin: 0 auto;
 }
 
 @media (min-width:960px) {
     .wrap {
-        grid-template-columns: 280px 1fr
+        grid-template-columns: 280px 1fr;
     }
 }
 
@@ -38,14 +42,14 @@ h1 {
     border: 1px solid #ccc;
     border-radius: 6px;
     padding: 10px;
-    background: #fafafa
+    background: #fafafa;
 }
 
 .row {
     display: flex;
     gap: 6px;
     align-items: center;
-    margin-bottom: 6px
+    margin-bottom: 6px;
 }
 
 .inputs .row input {
@@ -53,150 +57,74 @@ h1 {
     padding: 8px;
     border: 1px solid #bbb;
     border-radius: 4px;
-    font-size: 14px
+    font-size: 14px;
 }
 
-.btn {
+/* ===== 버튼 통일 ===== */
+.btn,
+label.btn {
+    appearance: none;
     flex: 1;
-    padding: 8px;
-    background: #eee;
     border: 1px solid #bbb;
-    border-radius: 4px;
-    cursor: pointer
+    background: #f6f6f6;
+    color: #111;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, transform .02s ease;
 }
 
-.btn:hover {
-    background: #e2e2e2
+.btn:hover,
+label.btn:hover {
+    background: #e8e8e8;
+    border-color: #b5b5b5;
+}
+
+.btn:active,
+label.btn:active {
+    transform: translateY(1px);
 }
 
 .btn:disabled {
     opacity: .5;
-    cursor: default
+    cursor: default;
 }
 
 .btn-ghost {
-    background: #fff
+    background: #fff;
 }
 
 .controls {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 8px
+    margin-top: 8px;
+}
+
+/* 5열 버튼 줄바꿈 방지 */
+.controls.five {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
 }
 
 .controls.five .btn {
-    flex: 1;
-    min-width: calc(20% - 4px)
+    min-width: 0;
 }
 
+/* 상태/텍스트 */
 .mini {
     font-size: 12px;
-    color: #555
+    color: #555;
 }
 
 .status-line {
     font-size: 12px;
     color: #333;
-    margin: 6px 0
-}
-
-.split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px
-}
-
-.col {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 6px
-}
-
-.col h3 {
-    margin: 0 0 4px 0;
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between
-}
-
-.lane {
-    display: grid;
-    grid-template-rows: repeat(5, 50px);
-    gap: 4px
-}
-
-.slot {
-    border: 1px dashed #888;
-    background: #fff;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    font-size: 12px;
-    color: #222
-}
-
-.slot.front {
-    border-style: solid;
-    border-color: #000
-}
-
-.slot.path {
-    border-style: dotted;
-    border-color: #666
-}
-
-.slot.queue {
-    border-style: dashed;
-    border-color: #888
-}
-
-.enemy {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    font-size: 11px;
-    line-height: 1.1
-}
-
-.hp {
-    font-weight: bold;
-    font-size: 12px
-}
-
-.badge {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    font-size: 10px;
-    background: #fff;
-    border: 1px solid #aaa;
-    border-radius: 3px;
-    padding: 1px 3px
-}
-
-.potion {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background: #fff;
-    padding: 8px;
-    margin-top: 8px
-}
-
-.potion .title {
-    font-weight: bold;
-    font-size: 13px
+    margin: 6px 0;
 }
 
 .pill {
@@ -205,17 +133,161 @@ h1 {
     border-radius: 99px;
     padding: 2px 8px;
     font-size: 12px;
-    margin-right: 4px
+    margin-right: 4px;
+}
+
+.meter {
+    height: 8px;
+    background: #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.meter>div {
+    height: 100%;
+    background: #888;
+}
+
+.split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+
+.col {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px;
+}
+
+.col h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* ===== 보드/슬롯 ===== */
+:root {
+    --slot-head: 14px;
+}
+
+.lane {
+    display: grid;
+    grid-template-rows: repeat(5, 50px);
+    gap: 4px;
+}
+
+.slot {
+    border: 1px dashed #888;
+    background: #fff;
+    border-radius: 4px;
+    position: relative;
+    font-size: 10px;
+    color: #222;
+    overflow: hidden;
+    text-align: center;
+}
+
+
+
+.slot.front {
+    border-style: solid;
+    border-color: #000;
+}
+
+.slot.path {
+    border-style: dotted;
+    border-color: #666;
+}
+
+.slot.queue {
+    border-style: dashed;
+    border-color: #888;
+}
+
+/* 슬롯 상단 라벨(Queue/Path/Front)은 JS가 넣는 첫 div. 겹침 방지 */
+.slot>div:first-child {
+    z-index: 3;
+    pointer-events: none;
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 10px;
+    color: #555;
+}
+
+/* ===== 몬스터 표시(겹침 해결 + 콤팩트) ===== */
+.badge {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    z-index: 3;
+    font-size: 9px;
+    background: #fff;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    padding: 0 3px;
+    line-height: 1.1;
+    letter-spacing: -0.2px;
+}
+
+/* 본문은 상단 헤더 영역을 제외한 나머지를 채우고 중앙정렬 */
+.enemy {
+    position: absolute;
+    inset: var(--slot-head) 0 0 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+    line-height: 1.2;
+    gap: 1px;
+    text-align: center;
+    z-index: 1;
+}
+
+.hp {
+    font-weight: 700;
+    font-size: 11px;
+    margin: 0;
+}
+
+.enemy .mini {
+    font-size: 10px;
+    line-height: 1.1;
+    color: #333;
+}
+
+/* ===== 포션 패널 ===== */
+.potion {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    padding: 8px;
+    margin-top: 8px;
+}
+
+.potion .title {
+    font-weight: bold;
+    font-size: 13px;
 }
 
 .flex {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px
+    gap: 6px;
 }
 
+/* ===== 로그 ===== */
 .log {
-    font-family: monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
     white-space: pre-wrap;
     border: 1px solid #ccc;
@@ -223,17 +295,303 @@ h1 {
     padding: 6px;
     background: #fff;
     max-height: 200px;
-    overflow: auto
+    overflow: auto;
 }
 
-.meter {
-    height: 8px;
+/* ===== 바텀시트(조합창: 단어 입력 + 포션뷰 포함) ===== */
+.sheet-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
+    z-index: 900;
+}
+
+.mixer-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #fafafa;
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .2);
+    transform: translateY(100%);
+    transition: transform .28s ease;
+    z-index: 901;
+    max-height: 75vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.mixer-head {
+    position: sticky;
+    top: 0;
+    background: #fafafa;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 10px 14px 6px;
+}
+
+.mixer-head h2 {
+    grid-column: 2;
+    margin: 0;
+    font-size: 15px;
+    text-align: center;
+}
+
+.mixer-close {
+    grid-column: 3;
+    justify-self: end;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 2px 6px;
+}
+
+.mixer-handle {
+    grid-column: 1/-1;
+    justify-self: center;
+    margin: 6px 0 8px;
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: #ccc;
+}
+
+.mixer-sheet>section {
+    padding: 10px 14px 16px;
+    overflow: auto;
+}
+
+/* 토글 */
+#mixToggle:checked~.sheet-scrim {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#mixToggle:checked~.mixer-sheet {
+    transform: translateY(0%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .mixer-sheet,
+    .sheet-scrim {
+        transition: none;
+    }
+}
+
+/* ===== 모바일 최적화 ===== */
+@media (max-width:420px) {
+    :root {
+        --slot-head: 12px;
+    }
+
+    .lane {
+        grid-template-rows: repeat(5, 56px);
+    }
+
+    .enemy {
+        font-size: 9px;
+    }
+
+    .hp {
+        font-size: 10px;
+    }
+
+    .btn,
+    label.btn {
+        font-size: 12px;
+        padding: 7px 8px;
+        border-radius: 6px;
+    }
+}
+
+/* === Boss Relic Modal (종합판) === */
+#relicScrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+    z-index: 1200;
+}
+
+#relicModal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, calc(100vw - 24px));
+    background: #fafafa;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+    z-index: 1201;
+    padding: 14px;
+}
+
+.rel-head {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.rel-head h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.rel-choices {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.rel-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+    text-align: left;
+    border: 1px solid #bbb;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, transform .02s ease;
+}
+
+.rel-card:hover {
+    background: #f4f4f4;
+    border-color: #b5b5b5;
+}
+
+.rel-card:active {
+    transform: translateY(1px);
+}
+
+.rel-name {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.rel-desc {
+    font-size: 12px;
+    color: #444;
+}
+
+.rel-input {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 8px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+@media (max-width:560px) {
+    .rel-choices {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rel-card {
+    position: relative;
+}
+
+.rel-input {
+    position: relative;
+    z-index: 1;
+}
+
+/* 바텀시트 기본 */
+.sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    translate: 0 100%;
+    transition: translate .25s ease;
+    background: #fff;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .12);
+    z-index: 1000;
+}
+
+.sheet.open {
+    translate: 0 0;
+}
+
+.sheet-handle {
+    width: 44px;
+    height: 6px;
+    border-radius: 6px;
     background: #ddd;
-    border-radius: 4px;
-    overflow: hidden
+    margin: 8px auto;
 }
 
-.meter>div {
-    height: 100%;
-    background: #888
+.sheet-content {
+    padding: 10px;
+}
+
+.sheet-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.sheet-title {
+    font-weight: 700;
+}
+
+.sheet-sub {
+    font-size: 12px;
+    color: #555;
+}
+
+.relic-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.relic-item {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fafafa;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: center;
+}
+
+.relic-name {
+    font-weight: 600;
+}
+
+.relic-meta {
+    font-size: 12px;
+    color: #555;
+}
+
+.relic-cost {
+    font-size: 12px;
+    padding: 2px 8px;
+    border: 1px solid #bbb;
+    border-radius: 999px;
+}
+
+
+.btn.mini {
+    padding: 6px 8px;
+    font-size: 12px;
 }

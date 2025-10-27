@@ -10,23 +10,25 @@
 
 <body>
 
+    <!-- 바텀시트 토글 (checkbox hack) -->
+    <input type="checkbox" id="mixToggle" hidden aria-hidden="true">
+
     <div class="wrap">
 
+        <!-- 좌측 카드: 턴 진행/리셋, 로그 등 (입력과 포션은 시트로 이동) -->
         <div class="card inputs">
             <h1>OAL 프로토타입</h1>
 
-            <div class="row"><input id="w1" placeholder="단어 1 (예: 겨울)" autocomplete="off" /></div>
-            <div class="row"><input id="w2" placeholder="단어 2 (예: storm)" autocomplete="off" /></div>
-            <div class="row"><input id="w3" placeholder="단어 3 (예: 石)" autocomplete="off" /></div>
-
+            <!-- ✅ 조합창 열기 버튼만 유지 -->
             <div class="row controls">
-                <button id="genBtn" class="btn">포션 생성 (턴당 2)</button>
+                <label for="mixToggle" class="btn btn-ghost" aria-controls="mixerSheet" aria-expanded="false">조합창
+                    열기</label>
                 <button id="turnBtn" class="btn">다음 턴 ▶</button>
+                <button id="relicToggleBtn" class="btn btn-ghost">유물 보기</button>
                 <button id="resetBtn" class="btn btn-ghost">리셋</button>
             </div>
 
-            <div id="langInfo" class="status-line">감지 대기…</div>
-
+            <!-- 상단 상태 -->
             <div class="split">
                 <div>
                     <div>라운드 / 코어 HP</div>
@@ -49,27 +51,7 @@
                 </div>
             </div>
 
-            <div id="potionView" class="potion" style="display:none">
-                <div class="title">⚗️ 생성된 포션</div>
-                <div id="potionName" class="mini"></div>
-                <div class="flex">
-                    <span id="pMain" class="pill"></span>
-                    <span id="pSub" class="pill"></span>
-                    <span id="pType" class="pill"></span>
-                    <span id="pCost" class="pill"></span>
-                    <span id="pDmg" class="pill"></span>
-                </div>
-                <div id="potionDesc" class="mini" style="margin-top:6px"></div>
-                <div class="controls five">
-                    <button class="btn" data-cast="0">열 1</button>
-                    <button class="btn" data-cast="1">열 2</button>
-                    <button class="btn" data-cast="2">열 3</button>
-                    <button class="btn" data-cast="3">열 4</button>
-                    <button class="btn" data-cast="4">열 5</button>
-                </div>
-                <div class="mini">※ 포션은 턴당 2개만 생성/사용</div>
-            </div>
-
+            <!-- 전투 로그 -->
             <div style="margin-top:8px">
                 <div>전투 로그</div>
                 <div id="log" class="log"></div>
@@ -83,15 +65,102 @@
         </div>
     </div>
 
+    <!-- ===== 바텀시트(조합창: 단어 입력 + 포션 패널 모두 포함) ===== -->
+    <label for="mixToggle" class="sheet-scrim" aria-hidden="true"></label>
 
+    <aside id="mixerSheet" class="mixer-sheet" role="dialog" aria-modal="true" aria-labelledby="mixerTitle">
+        <header class="mixer-head">
+            <div class="mixer-handle" aria-hidden="true"></div>
+            <h2 id="mixerTitle">포션 조합창</h2>
+            <label for="mixToggle" class="mixer-close" aria-label="닫기">×</label>
+        </header>
 
+        <section class="mixer-body">
+            <!-- ✅ 단어 입력란(원래 상단 카드에 있던 #w1,#w2,#w3) -->
+            <div class="row"><input id="w1" placeholder="단어 1 (예: 겨울)" autocomplete="off" /></div>
+            <div class="row"><input id="w2" placeholder="단어 2 (예: storm)" autocomplete="off" /></div>
+            <div class="row"><input id="w3" placeholder="단어 3 (예: 石)" autocomplete="off" /></div>
 
+            <!-- ✅ 포션 생성 버튼(원래 #genBtn) -->
+            <div class="row controls">
+                <button id="genBtn" class="btn">포션 생성 (턴당 2)</button>
+            </div>
 
+            <!-- ✅ 언어 감지 상태(원래 #langInfo) -->
+            <div id="langInfo" class="status-line">감지 대기…</div>
 
+            <!-- ✅ 기존 #potionView 그대로 (JS가 id로 참조) -->
+            <section id="potionView" class="potion" style="display:none">
+                <div class="title">⚗️ 생성된 포션</div>
+                <div id="potionName" class="mini"></div>
+                <div class="flex">
+                    <span id="pMain" class="pill"></span>
+                    <span id="pSub" class="pill"></span>
+                    <span id="pType" class="pill"></span>
+                    <span id="pCost" class="pill"></span>
+                    <span id="pDmg" class="pill"></span>
+                </div>
+                <div id="potionDesc" class="mini" style="margin-top:6px"></div>
 
+                <!-- 열 선택 버튼 (그리드 5열 정렬은 CSS에서 처리) -->
+                <div class="controls five">
+                    <button class="btn" data-cast="0">열 1</button>
+                    <button class="btn" data-cast="1">열 2</button>
+                    <button class="btn" data-cast="2">열 3</button>
+                    <button class="btn" data-cast="3">열 4</button>
+                    <button class="btn" data-cast="4">열 5</button>
+                </div>
 
+                <div class="mini">※ 포션은 턴당 2개만 생성/사용</div>
+            </section>
+        </section>
+    </aside>
 
+    <!-- ===== ▼▼▼ 유물 리스트 바텀시트 추가 ▼▼▼ ===== -->
+    <aside id="relicSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="relicListTitle"
+        aria-hidden="true">
+        <div class="sheet-handle" id="relicSheetHandle" title="드래그로 열고 닫기"></div>
+        <div class="sheet-content">
+            <div class="sheet-header">
+                <div>
+                    <div id="relicListTitle" class="sheet-title">보유 유물</div>
+                    <div class="sheet-sub">총 코스트 <span id="relicCostSum">0</span> / 10</div>
+                </div>
+                <button id="relicCloseBtn" class="btn btn-ghost mini">닫기</button>
+            </div>
+            <ul id="relicList" class="relic-list"></ul>
+            <div class="mini" style="margin-top:8px">
+                ※ 유물은 보스 처치 시 획득. 이름·시간(시) 기반 튠으로 코스트가 결정됩니다.
+            </div>
+        </div>
+    </aside>
+    <!-- ===== ▲▲▲ 유물 리스트 바텀시트 끝 ▲▲▲ ===== -->
 
+    <!-- 보스 유물 선택 모달 -->
+    <div id="relicScrim" style="display:none"></div>
+    <aside id="relicModal" role="dialog" aria-modal="true" aria-labelledby="relicTitle" style="display:none">
+        <header class="rel-head">
+            <h2 id="relicTitle">보스 유물 선택</h2>
+        </header>
+        <div class="rel-choices">
+            <button class="rel-card" data-pick="0">
+                <div class="rel-name"></div>
+                <div class="rel-desc mini"></div>
+                <input class="rel-input" type="text" maxlength="24" placeholder="유물 이름 직접 입력">
+            </button>
+            <button class="rel-card" data-pick="1">
+                <div class="rel-name"></div>
+                <div class="rel-desc mini"></div>
+                <input class="rel-input" type="text" maxlength="24" placeholder="유물 이름 직접 입력">
+            </button>
+            <button class="rel-card" data-pick="2">
+                <div class="rel-name"></div>
+                <div class="rel-desc mini"></div>
+                <input class="rel-input" type="text" maxlength="24" placeholder="유물 이름 직접 입력">
+            </button>
+        </div>
+        <div class="mini" style="text-align:center;margin-top:6px">하나를 선택하세요. (보스 처치 보상)</div>
+    </aside>
 
     <script type="module" src="./src/main.js"></script>
 </body>

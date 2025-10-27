@@ -1,3 +1,4 @@
+
 /* ===== 유틸 ===== */
 function fnv1a(str) { let h = 0x811c9dc5; for (const ch of str) { h ^= ch.codePointAt(0); h = (h >>> 0) * 0x01000193; } return h >>> 0; }
 function xorshift(seed) { let x = seed >>> 0 || 123456789; return () => { x ^= (x << 13); x >>>= 0; x ^= (x >>> 17); x >>>= 0; x ^= (x << 5); x >>>= 0; return (x >>> 0) / 0xFFFFFFFF; }; }
@@ -7,7 +8,7 @@ const log = (t) => { const el = document.getElementById('log'); if (el) el.textC
 /* 에러를 화면 로그에 바로 표시 */
 window.onerror = function (message, source, lineno, colno) { log(`[JS ERROR] ${message} @ ${lineno}:${colno}`); };
 
-/* ===== 효과 설명표 (단 한 번만 선언) ===== */
+/* ===== 효과 설명표 ===== */
 const EFFECT_DESCS = {
     Hangul: '기본피해 + 같은 열의 나머지 모든 적 추가피해(+1, 20% 확률 +2)',
     Latin: '기본피해 + 2턴 DOT 1 (25% 확률 DOT 2)',
@@ -16,7 +17,7 @@ const EFFECT_DESCS = {
     Sludge: '오물: 피해 1, 20% 자해/잠금(프로토타입)',
 };
 
-/* ===== 스크립트 판정 (라틴 오탐 FIX) ===== */
+/* ===== 스크립트 판정 ===== */
 function isAsciiPunctOrSpace(cp) {
     return (
         (cp >= 0x0000 && cp <= 0x002F) ||
@@ -83,6 +84,10 @@ const state = {
 
     /* ★ 이번 스테이지에서 보스가 이미 소환되었는지 플래그 */
     _bossSpawnedThisStage: false,
+
+    /* ★ 유물 시스템 상태 */
+    relics: [],                        // 보유 유물 목록
+    _bossRelicOfferedThisStage: false, // 스테이지당 1회 유물 선택 팝업 보호
 };
 
 /* ===== 타깃 유틸 ===== */
@@ -188,169 +193,11 @@ function dotResolvePhase() {
 function killEnemyAt(col, idx) {
     const q = state.lanes[col].queue, e = q[idx]; if (!e) return;
     q[idx] = null; log(`적 처치: 열${col + 1} (${(e.badge ? e.badge.toUpperCase() : e.type.toUpperCase())}/${e.variant || 'normal'})`);
-}
 
-/* ===== 포션 생성 ===== */
-function makeName(main, sub) { const m = { Hangul: '서릿빛', Latin: '전격', Han: '석화', Japanese: '요격', Sludge: '오염' }; return `【${sub ? m[main] + '·' + m[sub] : m[main]} 포션】`; }
-function describeEffect(main, sub) { const one = (s) => EFFECT_DESCS[s] || EFFECT_DESCS.Sludge; return sub ? `${one(main)} + ${one(sub)}(보조 약화)` : one(main); }
-
-function potionFrom(words) {
-    const { counts, set, hasOther, joined } = analyzeScripts(words);
-    const hasJP = detectJP(set);
-    if (hasOther) return makeSludge(joined, '허용외 문자 포함');
-    const k = set.size; if (k === 0) return null; if (k >= 3) return makeSludge(joined, '스크립트 3종 이상');
-
-    const score = { Hangul: counts.Hangul || 0, Latin: counts.Latin || 0, Han: counts.Han || 0, Japanese: (counts.Hiragana || 0) + (counts.Katakana || 0) };
-    const present = []; if (score.Hangul) present.push('Hangul'); if (score.Latin) present.push('Latin'); if (score.Han) present.push('Han'); if (hasJP) present.push('Japanese');
-
-    function firstIdxOfScript(s) {
-        for (const w of words) { for (let i = 0; i < w.length;) { const cp = w.codePointAt(i); const sc = scriptOf(cp); const map = (sc === 'Hiragana' || sc === 'Katakana') ? 'Japanese' : sc; if (map === s) return 1; i += cp > 0xFFFF ? 2 : 1; } }
-        return 0;
-    }
-    let main = null, sub = null;
-    if (present.length === 1) { main = present[0]; }
-    else {
-        present.sort((a, b) => { const d = (score[b] || 0) - (score[a] || 0); return d !== 0 ? d : (firstIdxOfScript(b) - firstIdxOfScript(a)); });
-        main = present[0]; sub = present[1];
-    }
-
-    const seedBase = fnv1a(words.join('|').normalize('NFC')) ^ (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
-    const rng = xorshift(seedBase);
-
-    let cost = 2; if (sub && rng() < 0.10) cost = 3;
-    const baseDmg = Math.floor((sub ? 2 : 3) + rng() * ((sub ? 4 : 5) - (sub ? 2 : 3) + 1));
-    return { seed: seedBase, rng, main, sub, type: (sub ? '듀얼' : '단일'), cost, baseDmg, isSludge: false, desc: describeEffect(main, sub) };
-}
-function makeSludge(joined, reason) {
-    const seedBase = fnv1a(joined) ^ (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
-    return { seed: seedBase, rng: xorshift(seedBase), main: 'Sludge', sub: null, type: '오물', cost: 1, baseDmg: 1, isSludge: true, desc: `오물 포션 (${reason}) — 피해 1, 20% 자해/잠금(프로토타입)` };
-}
-
-/* ===== 효과 적용 ===== */
-function castPotionOnColumn(p, col) {
-    if (!p) return;
-    if (state.usedThisTurn >= 2) { log('이 턴에 더 이상 카드를 사용할 수 없습니다 (최대 2장).'); return; }
-    if (state.energy < p.cost) { log(`에너지 부족: 필요 ${p.cost}`); return; }
-    state.energy = Math.max(0, state.energy - p.cost);
-
-    const lane = state.lanes[col];
-    const { enemy: eTarget, idx: ti } = getCombatEnemy(lane); // 0→1→2 중 맨앞
-
-    // 오물
-    if (p.isSludge) {
-        if (eTarget) { eTarget.hp -= 1; if (eTarget.hp <= 0) killEnemyAt(col, ti); }
-        if (p.rng() < 0.2) { state.core = Math.max(0, state.core - 1); log(`오물 반동! 코어 -1 (남은 ${state.core})`); }
-        log(`오물 포션: 열${col + 1} 슬롯${ti >= 0 ? ti : '-'} -1`);
-        afterCastConsume(); updateUI(); return;
-    }
-
-    // 일본어는 '요격'이므로 기본 타깃에 기본피해를 주지 않고, applyMainEffect에서 별도 타격
-    if (p.main !== 'Japanese') {
-        if (!eTarget) { log(`타깃 없음: 열${col + 1}에 전투 가능한 적이 없습니다.`); afterCastConsume(); updateUI(); return; }
-        eTarget.hp -= p.baseDmg;
-        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 열${col + 1} 슬롯${ti} -${p.baseDmg} (HP ${Math.max(0, eTarget.hp)})`);
-        if (eTarget.hp <= 0) killEnemyAt(col, ti);
-    } else {
-        // 일본어 메인일 때, 타깃 없어도 applyMainEffect에서 뒤쪽 요격을 시도
-        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 기본 타격은 요격 규칙으로 대체`);
-    }
-
-    applyMainEffect(p.main, col, p.baseDmg, p, ti);
-    if (p.sub) applySubEffect(p.sub, col, p.baseDmg, p, ti);
-
-    afterCastConsume();
-    updateUI();
-}
-function afterCastConsume() {
-    state.usedThisTurn++;
-    if (state.turnPotions.length > 0) state.turnPotions.shift();
-    state.potion = state.turnPotions[0] || null;
-}
-
-/* ===== 메인 효과 구현 ===== */
-function applyMainEffect(kind, col, base, p, combatIdx) {
-    const lane = state.lanes[col];
-
-    if (kind === 'Hangul') {
-        // 타깃을 제외한 같은 열의 모든 적에게 추가 피해 (+1, 20% 확률 +2)
-        const add = (p.rng() < 0.2) ? 2 : 1;
-        for (let i = 0; i < ROWS; i++) {
-            if (i === combatIdx) continue;
-            const e = lane.queue[i];
-            if (e) { e.hp -= add; log(`한글 확장피해: 열${col + 1} 슬롯${i} -${add} (HP ${Math.max(0, e.hp)})`); if (e.hp <= 0) { lane.queue[i] = null; log(`처치(한글 확장) @열${col + 1}/슬롯${i}`); } }
-        }
-
-    } else if (kind === 'Latin') {
-        // DOT 부여 (타깃 기준)
-        const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
-        if (idx >= 0) {
-            const e = lane.queue[idx];
-            if (e) { const v = (p.rng() < 0.40) ? 2 : 1; e.dot = { value: v, turns: 2 }; log(`라틴 DOT: 열${col + 1} 슬롯${idx} DOT${v}x2T`); }
-        }
-
-    } else if (kind === 'Han') {
-        // 좌/우 열 전투타깃에 확산
-        for (const dc of [-1, +1]) {
-            const cc = col + dc; if (cc < 0 || cc >= MAX_COLS) continue;
-            const { enemy: ne, idx: ni } = getCombatEnemy(state.lanes[cc]);
-            if (ne) { ne.hp -= base; log(`한자 확산(좌/우): 열${cc + 1} 슬롯${ni} -${base} (HP ${Math.max(0, ne.hp)})`); if (ne.hp <= 0) killEnemyAt(cc, ni); }
-        }
-        // 같은 열에서 타깃 '바로 뒤 1칸'에도 적용
-        const bi = (combatIdx >= 0 ? combatIdx : getCombatIdx(lane)) + 1;
-        if (bi >= 0 && bi < ROWS) {
-            const be = lane.queue[bi];
-            if (be) { be.hp -= base; log(`한자 추가(후열): 열${col + 1} 슬롯${bi} -${base} (HP ${Math.max(0, be.hp)})`); if (be.hp <= 0) killEnemyAt(col, bi); }
-        }
-
-    } else if (kind === 'Japanese') {
-        // 요격: 전투구역(0~2) 중 가장 뒤의 적(2→1→0)을 기본피해로 타격
-        const bi = getBackmostCombatIdx(lane);
-        if (bi >= 0) {
-            const e = lane.queue[bi];
-            e.hp -= base;
-            log(`일본어 요격: 열${col + 1} 슬롯${bi} -${base} (HP ${Math.max(0, e.hp)})`);
-            if (e.hp <= 0) killEnemyAt(col, bi);
-        } else {
-            log(`일본어 요격: 전투구역에 적 없음`);
-        }
-    }
-}
-
-/* ===== 보조 효과(약화판) ===== */
-function applySubEffect(kind, col, base, p, combatIdx) {
-    const lane = state.lanes[col];
-
-    if (kind === 'Hangul') {
-        // 60% 확률로 타깃 제외 같은 열 모든 적에게 +1
-        if (p.rng() < 0.6) {
-            for (let i = 0; i < ROWS; i++) {
-                if (i === combatIdx) continue;
-                const e = lane.queue[i];
-                if (e) { e.hp -= 1; log(`보조(한글) 여진: 열${col + 1} 슬롯${i} -1 (HP ${Math.max(0, e.hp)})`); if (e.hp <= 0) { lane.queue[i] = null; } }
-            }
-        }
-
-    } else if (kind === 'Latin') {
-        // 30% 확률 DOT1x2T
-        const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
-        if (idx >= 0 && p.rng() < 0.30) {
-            const e = lane.queue[idx]; if (e) { e.dot = { value: 1, turns: 2 }; log(`보조(라틴) DOT1x2T (12%) @열${col + 1}/슬롯${idx}`); }
-        }
-
-    } else if (kind === 'Han') {
-        // 50% 확률로 같은 열 '바로 뒤 1칸'에만 동일 피해
-        const bi = (combatIdx >= 0 ? combatIdx : getCombatIdx(lane)) + 1;
-        if (p.rng() < 0.5 && bi >= 0 && bi < ROWS) {
-            const be = lane.queue[bi]; if (be) { be.hp -= base; log(`보조(한자) 후열추가: 열${col + 1} 슬롯${bi} -${base}`); if (be.hp <= 0) killEnemyAt(col, bi); }
-        }
-
-    } else if (kind === 'Japanese') {
-        // 요격(약화): 전투구역에서 가장 뒤의 적에 ⌊base/2⌋
-        const bi = getBackmostCombatIdx(lane);
-        if (bi >= 0) {
-            const e = lane.queue[bi]; const dmg = Math.floor(base / 2);
-            if (dmg > 0) { e.hp -= dmg; log(`보조(일본어) 약화요격: 열${col + 1} 슬롯${bi} -${dmg}`); if (e.hp <= 0) killEnemyAt(col, bi); }
-        }
+    // ★ 보스 처치 → 유물 선택 팝업 (스테이지당 1회)
+    if (e.badge === 'boss' && !state._bossRelicOfferedThisStage) {
+        state._bossRelicOfferedThisStage = true;
+        openBossRelicPicker(); // (정의는 PART 3에 있음)
     }
 }
 
@@ -383,7 +230,7 @@ function nextTurn() {
     const seed = fnv1a(`spawn|${state.stage}|${state.round}|${state.runSeed}`);
     const rng = xorshift(seed);
 
-    /* ★ 조건: 스테이지가 7의 배수 & 라운드 2 & 아직 미소환 → 보스 대기열 스폰 */
+    /* ★ 조건: 스테이지 7의 배수 & 라운드 2 & 아직 미소환 → 보스 대기열 스폰 */
     if ((state.stage % 7 === 0) && state.round === 2 && !state._bossSpawnedThisStage) {
         spawnStageBoss(rng);
         state._bossSpawnedThisStage = true;
@@ -405,6 +252,23 @@ function nextTurn() {
     updateUI();
     log(`— 턴 시작: 스폰 ${cols.map(c => c + 1).join(', ') || '없음'}, 에너지 +${state.energyGain}`);
 }
+function bossJumpNextTurn() {
+    // 스테이지를 7의 배수로 맞춤 (현재보다 낮아지지 않게)
+    if (state.stage % 7 !== 0) state.stage = Math.ceil(state.stage / 7) * 7;
+
+    // 플래그 초기화 및 라운드 1로 세팅
+    state._bossSpawnedThisStage = false;
+    state._bossRelicOfferedThisStage = false;
+    state.round = 1;
+
+    updateUI();
+    log('보스 테스트: 다음 턴에 보스가 등장합니다. (스테이지 ' + state.stage + ', 라운드 2 조건)');
+}
+document.addEventListener('keydown', (e) => {
+    if (e.shiftKey && (e.key === ',' || e.key === '<')) {
+        bossJumpNextTurn();
+    }
+});
 function endOfTurnResolve() {
     enemyAttackPhase();
     dotResolvePhase();
@@ -440,13 +304,210 @@ function toNextStage() {
 
     state.energy = clamp(state.energy + 2, 0, state.energyMax);
 
-    /* ★ 새 스테이지 진입 시 보스 스폰 플래그 초기화 */
+    /* ★ 새 스테이지 진입 시 보스/유물 플래그 초기화 */
     state._bossSpawnedThisStage = false;
+    state._bossRelicOfferedThisStage = false;
+
+    /* ★ 유물 지속효과: 스테이지 시작 회복 */
+    const stageHealer = state.relics.find(rr => rr.id === 'hardened_shell_stage_heal');
+    if (stageHealer) {
+        state.core = Math.min(state.coreMax, state.core + (stageHealer.heal || 2));
+    }
 
     log(`▶ 스테이지 ${state.stage} 시작: hp×${state.stageMods.hpScale.toFixed(2)}, dmg×${state.stageMods.dmgScale.toFixed(2)}, elite+${(state.stageMods.eliteBonus * 100) | 0}%`);
 }
 
-/* ===== UI ===== */
+
+/* ===== 포션 생성 ===== */
+function makeName(main, sub) {
+    const m = { Hangul: '서릿빛', Latin: '전격', Han: '석화', Japanese: '요격', Sludge: '오염' };
+    return `【${sub ? m[main] + '·' + m[sub] : m[main]} 포션】`;
+}
+function describeEffect(main, sub) {
+    const one = (s) => EFFECT_DESCS[s] || EFFECT_DESCS.Sludge;
+    return sub ? `${one(main)} + ${one(sub)}(보조 약화)` : one(main);
+}
+
+/* ===== 포션 로직 수정 (유물 보정 포함) ===== */
+function potionFrom(words) {
+    const { counts, set, hasOther, joined } = analyzeScripts(words);
+    const hasJP = detectJP(set);
+    if (hasOther) return makeSludge(joined, '허용외 문자 포함');
+    const k = set.size;
+    if (k === 0) return null;
+    if (k >= 3) return makeSludge(joined, '스크립트 3종 이상');
+
+    const score = {
+        Hangul: counts.Hangul || 0,
+        Latin: counts.Latin || 0,
+        Han: counts.Han || 0,
+        Japanese: (counts.Hiragana || 0) + (counts.Katakana || 0)
+    };
+    const present = [];
+    if (score.Hangul) present.push('Hangul');
+    if (score.Latin) present.push('Latin');
+    if (score.Han) present.push('Han');
+    if (hasJP) present.push('Japanese');
+
+    function firstIdxOfScript(s) {
+        for (const w of words) {
+            for (let i = 0; i < w.length;) {
+                const cp = w.codePointAt(i);
+                const sc = scriptOf(cp);
+                const map = (sc === 'Hiragana' || sc === 'Katakana') ? 'Japanese' : sc;
+                if (map === s) return 1;
+                i += cp > 0xFFFF ? 2 : 1;
+            }
+        }
+        return 0;
+    }
+    let main = null, sub = null;
+    if (present.length === 1) main = present[0];
+    else {
+        present.sort((a, b) => {
+            const d = (score[b] || 0) - (score[a] || 0);
+            return d !== 0 ? d : (firstIdxOfScript(b) - firstIdxOfScript(a));
+        });
+        main = present[0];
+        sub = present[1];
+    }
+
+    const seedBase = fnv1a(words.join('|').normalize('NFC')) ^
+        (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
+    const rng = xorshift(seedBase);
+
+    let cost = 2;
+    if (sub && rng() < 0.10) cost = 3;
+    let baseDmg = Math.floor((sub ? 2 : 3) + rng() * ((sub ? 4 : 5) - (sub ? 2 : 3) + 1));
+
+    /* ★ 유물 보정: 증류 촉매(distill) */
+    const distill = state.relics.find(r => r.id === 'distill_bonus');
+    if (distill && distill.dmg) baseDmg += distill.dmg;
+
+    return { seed: seedBase, rng, main, sub, type: (sub ? '듀얼' : '단일'), cost, baseDmg, isSludge: false, desc: describeEffect(main, sub) };
+}
+function makeSludge(joined, reason) {
+    const seedBase = fnv1a(joined) ^ (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
+    return { seed: seedBase, rng: xorshift(seedBase), main: 'Sludge', sub: null, type: '오물', cost: 1, baseDmg: 1, isSludge: true, desc: `오물 포션 (${reason}) — 피해 1, 20% 자해/잠금(프로토타입)` };
+}
+
+/* ===== 포션 사용 ===== */
+function castPotionOnColumn(p, col) {
+    if (!p) return;
+    if (state.usedThisTurn >= 2) { log('이 턴에 더 이상 카드를 사용할 수 없습니다 (최대 2장).'); return; }
+    if (state.energy < p.cost) { log(`에너지 부족: 필요 ${p.cost}`); return; }
+    state.energy = Math.max(0, state.energy - p.cost);
+
+    const lane = state.lanes[col];
+    const { enemy: eTarget, idx: ti } = getCombatEnemy(lane);
+
+    if (p.isSludge) {
+        if (eTarget) { eTarget.hp -= 1; if (eTarget.hp <= 0) killEnemyAt(col, ti); }
+        if (p.rng() < 0.2) { state.core = Math.max(0, state.core - 1); log(`오물 반동! 코어 -1 (남은 ${state.core})`); }
+        log(`오물 포션: 열${col + 1} 슬롯${ti >= 0 ? ti : '-'} -1`);
+        afterCastConsume(); updateUI(); return;
+    }
+
+    if (p.main !== 'Japanese') {
+        if (!eTarget) { log(`타깃 없음: 열${col + 1}에 전투 가능한 적이 없습니다.`); afterCastConsume(); updateUI(); return; }
+        eTarget.hp -= p.baseDmg;
+        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 열${col + 1} 슬롯${ti} -${p.baseDmg} (HP ${Math.max(0, eTarget.hp)})`);
+        if (eTarget.hp <= 0) killEnemyAt(col, ti);
+    } else {
+        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 기본 타격은 요격 규칙으로 대체`);
+    }
+
+    applyMainEffect(p.main, col, p.baseDmg, p, ti);
+    if (p.sub) applySubEffect(p.sub, col, p.baseDmg, p, ti);
+
+    afterCastConsume();
+    updateUI();
+}
+function afterCastConsume() {
+    state.usedThisTurn++;
+    if (state.turnPotions.length > 0) state.turnPotions.shift();
+    state.potion = state.turnPotions[0] || null;
+}
+
+/* ===== 메인 효과 ===== */
+function applyMainEffect(kind, col, base, p, combatIdx) {
+    const lane = state.lanes[col];
+
+    if (kind === 'Hangul') {
+        const add = (p.rng() < 0.2) ? 2 : 1;
+        for (let i = 0; i < ROWS; i++) {
+            if (i === combatIdx) continue;
+            const e = lane.queue[i];
+            if (e) { e.hp -= add; log(`한글 확장피해: 열${col + 1} 슬롯${i} -${add} (HP ${Math.max(0, e.hp)})`); if (e.hp <= 0) { lane.queue[i] = null; log(`처치(한글 확장) @열${col + 1}/슬롯${i}`); } }
+        }
+
+    } else if (kind === 'Latin') {
+        const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
+        if (idx >= 0) {
+            const e = lane.queue[idx];
+            if (e) { const v = (p.rng() < 0.40) ? 2 : 1; e.dot = { value: v, turns: 2 }; log(`라틴 DOT: 열${col + 1} 슬롯${idx} DOT${v}x2T`); }
+        }
+
+    } else if (kind === 'Han') {
+        for (const dc of [-1, +1]) {
+            const cc = col + dc; if (cc < 0 || cc >= MAX_COLS) continue;
+            const { enemy: ne, idx: ni } = getCombatEnemy(state.lanes[cc]);
+            if (ne) { ne.hp -= base; log(`한자 확산(좌/우): 열${cc + 1} 슬롯${ni} -${base} (HP ${Math.max(0, ne.hp)})`); if (ne.hp <= 0) killEnemyAt(cc, ni); }
+        }
+        const bi = (combatIdx >= 0 ? combatIdx : getCombatIdx(lane)) + 1;
+        if (bi >= 0 && bi < ROWS) {
+            const be = lane.queue[bi];
+            if (be) { be.hp -= base; log(`한자 추가(후열): 열${col + 1} 슬롯${bi} -${base} (HP ${Math.max(0, be.hp)})`); if (be.hp <= 0) killEnemyAt(col, bi); }
+        }
+
+    } else if (kind === 'Japanese') {
+        const bi = getBackmostCombatIdx(lane);
+        if (bi >= 0) {
+            const e = lane.queue[bi];
+            e.hp -= base;
+            log(`일본어 요격: 열${col + 1} 슬롯${bi} -${base} (HP ${Math.max(0, e.hp)})`);
+            if (e.hp <= 0) killEnemyAt(col, bi);
+        } else {
+            log(`일본어 요격: 전투구역에 적 없음`);
+        }
+    }
+}
+
+/* ===== 보조 효과 ===== */
+function applySubEffect(kind, col, base, p, combatIdx) {
+    const lane = state.lanes[col];
+
+    if (kind === 'Hangul') {
+        if (p.rng() < 0.6) {
+            for (let i = 0; i < ROWS; i++) {
+                if (i === combatIdx) continue;
+                const e = lane.queue[i];
+                if (e) { e.hp -= 1; log(`보조(한글) 여진: 열${col + 1} 슬롯${i} -1 (HP ${Math.max(0, e.hp)})`); if (e.hp <= 0) { lane.queue[i] = null; } }
+            }
+        }
+
+    } else if (kind === 'Latin') {
+        const idx = combatIdx >= 0 ? combatIdx : getCombatIdx(lane);
+        if (idx >= 0 && p.rng() < 0.30) {
+            const e = lane.queue[idx]; if (e) { e.dot = { value: 1, turns: 2 }; log(`보조(라틴) DOT1x2T (12%) @열${col + 1}/슬롯${idx}`); }
+        }
+
+    } else if (kind === 'Han') {
+        const bi = (combatIdx >= 0 ? combatIdx : getCombatIdx(lane)) + 1;
+        if (p.rng() < 0.5 && bi >= 0 && bi < ROWS) {
+            const be = lane.queue[bi]; if (be) { be.hp -= base; log(`보조(한자) 후열추가: 열${col + 1} 슬롯${bi} -${base}`); if (be.hp <= 0) killEnemyAt(col, bi); }
+        }
+
+    } else if (kind === 'Japanese') {
+        const bi = getBackmostCombatIdx(lane);
+        if (bi >= 0) {
+            const e = lane.queue[bi]; const dmg = Math.floor(base / 2);
+            if (dmg > 0) { e.hp -= dmg; log(`보조(일본어) 약화요격: 열${col + 1} 슬롯${bi} -${dmg}`); if (e.hp <= 0) killEnemyAt(col, bi); }
+        }
+    }
+}
+
+/* ===== UI (Grid & Potion Panel) ===== */
 function renderGrid() {
     const grid = document.getElementById('grid'); if (!grid) return;
     grid.innerHTML = '';
@@ -460,7 +521,6 @@ function renderGrid() {
         h3.appendChild(left); h3.appendChild(right); col.appendChild(h3);
 
         const lane = document.createElement('div'); lane.className = 'lane';
-
         for (let r = 0; r < ROWS; r++) {
             const slot = document.createElement('div');
             let cls = 'queue'; if (r === 0) cls = 'front'; else if (r === 1 || r === 2) cls = 'path';
@@ -495,6 +555,180 @@ function renderGrid() {
         col.appendChild(lane); col.appendChild(ctr); grid.appendChild(col);
     }
 }
+
+
+// 매일 같은 '시'에 같은 결과를 주기 위한 키
+function currentHourKey() {
+    try { return new Date().getHours(); } catch (e) { return 0; }
+}
+
+// 이름(NFC) + 시간(시) → 결정적 코스트/계수
+function deriveRelicTuning(name, hour) {
+    const base = (name || '').normalize('NFC');
+    const seed = fnv1a(base) ^ ((hour & 0xff) * 2654435761 >>> 0);
+    const rng = xorshift(seed);
+
+    const cost = 1 + Math.floor(rng() * 3); // 1~3
+    const coeffs = {
+        dmgFlat: Math.floor(rng() * 2),            // {0,1}
+        energyCapBonus: Math.floor(rng() * 3),     // {0,1,2}
+        energyGainBonus: (rng() < 0.5 ? 0 : 1),    // 0 or 1
+        coreMaxBonus: Math.floor(rng() * 5),       // {0..4}
+        coreHealInstant: Math.floor(rng() * 4),    // {0..3}
+    };
+    return { cost, coeffs, seed };
+}
+
+// 현재 보유 유물의 총 코스트
+function totalRelicCost() {
+    return state.relics.reduce((s, r) => s + (r.cost || 0), 0);
+}
+
+// 유물 풀(베이스 효과)
+const RELIC_POOL = [
+    {
+        id: 'core_cap',
+        name: '코어 증폭기',
+        desc: '코어 최대치 +4, 즉시 +4 회복',
+        apply(base, tuneName, tune) {
+            const addCap = 4 + tune.coeffs.coreMaxBonus;     // 4~8
+            const heal = 4 + tune.coeffs.coreHealInstant;  // 4~7
+            state.coreMax += addCap;
+            state.core = Math.min(state.coreMax, state.core + heal);
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 코어 최대 +${addCap}, 즉시 +${heal}`);
+        }
+    },
+    {
+        id: 'overclock',
+        name: '오버클록 플라스크',
+        desc: '에너지 상한 +2, 턴당 +1',
+        apply(base, tuneName, tune) {
+            const cap = 2 + tune.coeffs.energyCapBonus;     // 2~4
+            const gain = 1 + tune.coeffs.energyGainBonus;    // 1~2
+            state.energyMax += cap;
+            state.energyGain += gain;
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 에너지 상한 +${cap}, 턴당 +${gain}`);
+        }
+    },
+    {
+        id: 'swift_path',
+        name: '신속 경로',
+        desc: '즉시 에너지 +1',
+        apply(base, tuneName, tune) {
+            const instant = 1 + (tune.coeffs.energyGainBonus ? 1 : 0); // 1~2
+            state.energy = Math.min(state.energyMax, state.energy + instant);
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 즉시 에너지 +${instant}`);
+        }
+    },
+    {
+        id: 'hardened_shell',
+        name: '강화 외골격',
+        desc: '스테이지 시작 회복 +2',
+        apply(base, tuneName, tune) {
+            const addCap = 2 + Math.floor(tune.coeffs.coreMaxBonus / 2); // 2~4
+            const healOnStage = 2 + Math.floor(tune.coeffs.coreHealInstant / 2); // 2~3
+            state.coreMax += addCap;
+            state.relics.push({ id: 'hardened_shell_stage_heal', heal: healOnStage });
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 코어 최대 +${addCap}, 스테이지 시작마다 +${healOnStage}`);
+        }
+    },
+    {
+        id: 'distill',
+        name: '증류 촉매',
+        desc: '포션 기본피해 +1',
+        apply(base, tuneName, tune) {
+            const dmg = 1 + tune.coeffs.dmgFlat; // 1~2
+            state.relics.push({ id: 'distill_bonus', dmg });
+            state.relics.push({ id: base.id, name: tuneName, cost: tune.cost, seed: tune.seed });
+            log(`유물 획득: ${tuneName} (코스트 ${tune.cost}) / 포션 기본피해 +${dmg}`);
+        }
+    }
+];
+
+// 후보 3개(결정적) 생성
+function genBossRelicChoices() {
+    const seed = fnv1a(`relic|${state.stage}|${state.runSeed}|${state.round}`);
+    const rng = xorshift(seed);
+    const idxs = Array.from({ length: RELIC_POOL.length }, (_, i) => i);
+    for (let i = idxs.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+    }
+    return idxs.slice(0, 3).map(i => RELIC_POOL[i]);
+}
+
+// 모달 열기/닫기
+function openBossRelicPicker() {
+    const modal = document.getElementById('relicModal');
+    const scrim = document.getElementById('relicScrim');
+    if (!modal || !scrim) { log('유물 모달 요소를 찾을 수 없습니다.'); return; }
+
+    const picks = genBossRelicChoices();
+    const cards = modal.querySelectorAll('.rel-card');
+
+    cards.forEach((btn, i) => {
+        const r = picks[i];
+        const nameEl = btn.querySelector('.rel-name');
+        const descEl = btn.querySelector('.rel-desc');
+        const input = btn.querySelector('.rel-input');
+
+        nameEl.textContent = r.name;
+        descEl.textContent = r.desc;
+
+        // 버튼 클릭: 입력란을 클릭한 경우는 무시
+        const choose = (customName) => {
+            const hour = currentHourKey();
+            const tune = deriveRelicTuning(customName, hour);
+            const newTotal = totalRelicCost() + tune.cost;
+            if (newTotal > 10) { log(`유물 코스트 초과: 현재 ${totalRelicCost()} + ${tune.cost} > 10`); return; }
+            r.apply(r, customName, tune);
+            updateUI();
+            closeBossRelicPicker();
+        };
+
+        btn.addEventListener('click', (ev) => {
+            if (ev.target && ev.target.closest('.rel-input')) return; // 입력란 클릭은 선택 취급 X
+            const customName = (input && input.value.trim()) || r.name;
+            choose(customName);
+        });
+
+        // 입력란: 클릭/포커스 시 버블링 차단 (버튼으로 올라가지 않게)
+        if (input) {
+            const stop = (e) => e.stopPropagation();
+            input.addEventListener('click', stop);
+            input.addEventListener('mousedown', stop);
+            input.addEventListener('mouseup', stop);
+            input.addEventListener('touchstart', stop);
+            input.addEventListener('touchend', stop);
+            input.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const customName = input.value.trim() || r.name;
+                    choose(customName); // Enter로 바로 선택 허용
+                }
+            });
+        }
+    });
+
+    scrim.style.display = 'block';
+    modal.style.display = 'block';
+    scrim.onclick = null; // 강제 선택 유지(필요하면 닫기 허용 가능)
+}
+
+function closeBossRelicPicker() {
+    const modal = document.getElementById('relicModal');
+    const scrim = document.getElementById('relicScrim');
+    if (!modal || !scrim) return;
+    modal.style.display = 'none';
+    scrim.style.display = 'none';
+}
+
+/* ===== 상단 바 & 포션 패널 ===== */
 function updateTopBars() {
     document.getElementById('roundTxt').textContent = `라운드 ${state.round} (스테이지 ${state.stage})`;
     document.getElementById('coreTxt').textContent = state.core;
@@ -547,8 +781,10 @@ function updateLangDebug() {
     const w2 = document.getElementById('w2').value || '';
     const w3 = document.getElementById('w3').value || '';
     const { counts, set, hasOther } = analyzeScripts([w1, w2, w3]);
-    const parts = [];['Hangul', 'Latin', 'Han', 'Hiragana', 'Katakana'].forEach(k => { if (counts[k] > 0) parts.push(`${k}(${counts[k]})`); });
-    const s = `감지된: ${parts.join(' + ') || '없음'}  |  상태: ` + (hasOther ? '오물(허용 외 문자)' : (set.size === 0 ? '무효' : (set.size <= 2 ? `정상 조합 (${set.size}/2)` : '오물(3종 이상)')));
+    const parts = [];
+    ['Hangul', 'Latin', 'Han', 'Hiragana', 'Katakana'].forEach(k => { if (counts[k] > 0) parts.push(`${k}(${counts[k]})`); });
+    const s = `감지된: ${parts.join(' + ') || '없음'}  |  상태: ` +
+        (hasOther ? '오물(허용 외 문자)' : (set.size === 0 ? '무효' : (set.size <= 2 ? `정상 조합 (${set.size}/2)` : '오물(3종 이상)')));
     document.getElementById('langInfo').textContent = s;
 }
 function updateUI() { renderGrid(); updateTopBars(); showPotion(state.potion); }
@@ -572,6 +808,81 @@ document.getElementById('genBtn').onclick = () => {
 document.getElementById('turnBtn').onclick = () => { endOfTurnResolve(); nextTurn(); };
 document.getElementById('resetBtn').onclick = resetGame;
 ['w1', 'w2', 'w3'].forEach(id => document.getElementById(id).addEventListener('input', updateLangDebug));
+/* ===== 유물 리스트 바텀시트 ===== */
+(function setupRelicSheet() {
+    const sheet = document.getElementById('relicSheet');
+    const btnToggle = document.getElementById('relicToggleBtn');
+    const btnClose = document.getElementById('relicCloseBtn');
+    const handle = document.getElementById('relicSheetHandle');
+    const listEl = document.getElementById('relicList');
+    const sumEl = document.getElementById('relicCostSum');
+
+    if (!sheet || !btnToggle || !btnClose || !handle || !listEl || !sumEl) return;
+
+    function openSheet() { sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false'); }
+    function closeSheet() { sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true'); }
+
+    function renderRelicList() {
+        listEl.innerHTML = '';
+        let costSum = 0;
+
+        // state.relics에는 내부 보정용 엔트리(distill_bonus, hardened_shell_stage_heal)도 섞여 있을 수 있음.
+        // 화면엔 "플레이어가 실제로 획득한 유물(id가 풀에 등록된 것)"만 보여주자.
+        const visible = state.relics.filter(r => {
+            // 풀 유물 id 집합과 매칭
+            return ['core_cap', 'overclock', 'swift_path', 'hardened_shell', 'distill'].includes(r.id);
+        });
+
+        for (const r of visible) {
+            costSum += (r.cost || 0);
+            const li = document.createElement('li');
+            li.className = 'relic-item';
+
+            const left = document.createElement('div');
+            const name = document.createElement('div');
+            name.className = 'relic-name';
+            name.textContent = r.name || '(이름 없음)';
+
+            const meta = document.createElement('div');
+            meta.className = 'relic-meta';
+            // 간단 설명: id 기반
+            meta.textContent =
+                r.id === 'core_cap' ? '코어 최대/회복 강화'
+                    : r.id === 'overclock' ? '에너지 상한/수급 강화'
+                        : r.id === 'swift_path' ? '즉시 에너지'
+                            : r.id === 'hardened_shell' ? '스테이지 시작 회복'
+                                : r.id === 'distill' ? '포션 기본피해 +'
+                                    : '유물';
+
+            left.appendChild(name);
+            left.appendChild(meta);
+
+            const right = document.createElement('div');
+            const costBadge = document.createElement('span');
+            costBadge.className = 'relic-cost';
+            costBadge.textContent = `Cost ${r.cost || 0}`;
+            right.appendChild(costBadge);
+
+            li.appendChild(left);
+            li.appendChild(right);
+            listEl.appendChild(li);
+        }
+
+        sumEl.textContent = costSum.toString();
+    }
+
+
+    handle.addEventListener('click', () => {
+        if (sheet.classList.contains('open')) closeSheet(); else openSheet();
+    });
+    btnToggle.addEventListener('click', () => { renderRelicList(); openSheet(); });
+    btnClose.addEventListener('click', closeSheet);
+
+
+    window.renderRelicList = renderRelicList;
+})();
+
+
 
 /* ===== 초기화 & 런 시드 ===== */
 function initRunSeed() {
@@ -592,8 +903,11 @@ function resetGame() {
     state.round = 1; state.core = state.coreMax; state.energy = state.energyGain;
     state.lanes = Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false }));
     state.turnPotions.length = 0; state.usedThisTurn = 0; state.potion = null;
-    state._bossSpawnedThisStage = false; /* ★ 초기화 */
+    state._bossSpawnedThisStage = false;
+    state._bossRelicOfferedThisStage = false;
+    // 보유 유물은 유지(로그라이크 감성). 초기화 원하면 state.relics=[]; 추가.
     document.getElementById('log').textContent = '';
     updateLangDebug(); updateUI(); nextTurn();
 }
+
 resetGame();
