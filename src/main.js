@@ -80,6 +80,9 @@ const state = {
     turnPotions: [],
     usedThisTurn: 0,
     potion: null,
+
+    /* ★ 이번 스테이지에서 보스가 이미 소환되었는지 플래그 */
+    _bossSpawnedThisStage: false,
 };
 
 /* ===== 타깃 유틸 ===== */
@@ -106,10 +109,11 @@ function makeEnemy(baseType, variant, rng) {
 
     return { type: baseType, variant, hp, dmg, badge, dot: null };
 }
+
+/* ★ 10라운드=보스 규칙 제거된 버전 */
 function pickEnemyType(wave, rng) {
     const baseElite = 0.10 + 0.02 * wave + state.stageMods.eliteBonus;
     const eliteProb = clamp(baseElite, 0, 0.6);
-    if (wave === 10) return 'boss';
     return (rng() < eliteProb) ? 'elite' : 'basic';
 }
 function pickVariant(rng) {
@@ -128,6 +132,32 @@ function spawnEnemyForLane(lane, rng, wave) {
     const enemy = makeEnemy(baseType, variant, rng);
     for (let i = 4; i >= 3; i--) { if (q[i] == null) { q[i] = enemy; break; } }
 }
+
+/* ★ 스테이지 보스 강제 스폰(2라운드에, 7의 배수 스테이지) */
+function spawnStageBoss(rng) {
+    // Queue2(4) 우선, 가득 차면 Queue1(3)
+    const candidates4 = [];
+    const candidates3 = [];
+    for (let c = 0; c < MAX_COLS; c++) {
+        const q = state.lanes[c].queue;
+        if (q[4] == null) candidates4.push(c);
+        else if (q[3] == null) candidates3.push(c);
+    }
+    const pool = candidates4.length ? candidates4 : candidates3;
+    if (pool.length === 0) {
+        log('보스 스폰 실패: 모든 열의 대기열이 가득 찼습니다.');
+        return false;
+    }
+    const col = pool[Math.floor(rng() * pool.length)];
+    const q = state.lanes[col].queue;
+    const slot = (q[4] == null ? 4 : 3);
+    const boss = makeEnemy('boss', pickVariant(rng), rng);
+    q[slot] = boss;
+    log(`◎ 보스 등장: 스테이지 ${state.stage} / 라운드 ${state.round} / 열${col + 1} (${slot === 4 ? 'Queue2' : 'Queue1'})`);
+    return true;
+}
+
+/* ===== 전개 & 공격/도트 처리 ===== */
 function advanceAll() {
     for (const lane of state.lanes) {
         const q = lane.queue;
@@ -353,6 +383,12 @@ function nextTurn() {
     const seed = fnv1a(`spawn|${state.stage}|${state.round}|${state.runSeed}`);
     const rng = xorshift(seed);
 
+    /* ★ 조건: 스테이지가 7의 배수 & 라운드 2 & 아직 미소환 → 보스 대기열 스폰 */
+    if ((state.stage % 7 === 0) && state.round === 2 && !state._bossSpawnedThisStage) {
+        spawnStageBoss(rng);
+        state._bossSpawnedThisStage = true;
+    }
+
     const cols = chooseSpawnColumns(rng);
     for (const c of cols) spawnEnemyForLane(state.lanes[c], rng, (state.round >= 10 ? 10 : state.round));
 
@@ -403,6 +439,9 @@ function toNextStage() {
     }
 
     state.energy = clamp(state.energy + 2, 0, state.energyMax);
+
+    /* ★ 새 스테이지 진입 시 보스 스폰 플래그 초기화 */
+    state._bossSpawnedThisStage = false;
 
     log(`▶ 스테이지 ${state.stage} 시작: hp×${state.stageMods.hpScale.toFixed(2)}, dmg×${state.stageMods.dmgScale.toFixed(2)}, elite+${(state.stageMods.eliteBonus * 100) | 0}%`);
 }
@@ -553,6 +592,7 @@ function resetGame() {
     state.round = 1; state.core = state.coreMax; state.energy = state.energyGain;
     state.lanes = Array.from({ length: MAX_COLS }, () => ({ queue: [null, null, null, null, null], locked: false }));
     state.turnPotions.length = 0; state.usedThisTurn = 0; state.potion = null;
+    state._bossSpawnedThisStage = false; /* ★ 초기화 */
     document.getElementById('log').textContent = '';
     updateLangDebug(); updateUI(); nextTurn();
 }
