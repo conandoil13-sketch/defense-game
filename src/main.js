@@ -420,24 +420,37 @@ function makeSludge(joined, reason) {
     const seedBase = fnv1a(joined) ^ (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
     return { seed: seedBase, rng: xorshift(seedBase), main: 'Sludge', sub: null, type: '오물', cost: 1, baseDmg: 1, isSludge: true, desc: `오물 포션 (${reason}) — 피해 1, 20% 자해/잠금(프로토타입)` };
 }
-/* ===== 포션 사용 전 공통 소비 처리 ===== */
-
-function afterCastConsume() {
-    // 이 턴 사용 카운트 증가
+/* ===== 포션 소비 처리 (Safari-safe) ===== */
+function afterCastConsumeCore() {
+    // 이 턴 사용 카운트
     state.usedThisTurn = (state.usedThisTurn || 0) + 1;
 
-    // 대기 중 포션 큐에서 1장 소모
+    // 대기 큐에서 1장 소비
     if (Array.isArray(state.turnPotions) && state.turnPotions.length > 0) {
         state.turnPotions.shift();
     }
 
-    // 다음 사용할 포션 업데이트
+    // 다음 사용할 포션 선정
     state.potion = (state.turnPotions && state.turnPotions[0]) || null;
 }
 
-if (typeof window !== 'undefined') {
-    window.afterCastConsume = afterCastConsume;
+// 모듈 스코프용
+function afterCastConsume() { return afterCastConsumeCore(); }
+
+// 전역(window/globalThis)에도 확실히 노출 (iOS Safari 캐싱/스코프 이슈 회피)
+try {
+    (globalThis || window).afterCastConsume = afterCastConsumeCore;
+} catch (_) { }
+
+/* 안전 호출 래퍼 */
+function SAFE_afterCastConsume() {
+    if (typeof afterCastConsume === 'function') return afterCastConsume();
+    if (typeof globalThis !== 'undefined' && typeof globalThis.afterCastConsume === 'function')
+        return globalThis.afterCastConsume();
+    // 최후 폴백(정의가 아직 없을 때도 안전)
+    afterCastConsumeCore();
 }
+
 /* ===== 포션 사용 ===== */
 function castPotionOnColumn(p, col) {
     if (!p) return;
@@ -451,20 +464,22 @@ function castPotionOnColumn(p, col) {
     const lane = state.lanes[col];
     const { enemy: eTarget, idx: ti } = getCombatEnemy(lane);
 
-    // ✅ 메인/보조가 공유할 앵커 인덱스를 시전 직전에 고정
+    // 메인/보조 공통 기준 인덱스 고정
     const anchorIdx = (p.main === 'Japanese')
-        ? getBackmostCombatIdx(lane)                      // 일본어: 전투구역의 뒤쪽
-        : (ti >= 0 ? ti : getCombatIdx(lane));            // 그 외: 전투구역의 맨 앞
+        ? getBackmostCombatIdx(lane)
+        : (ti >= 0 ? ti : getCombatIdx(lane));
 
+    // 오물
     if (p.isSludge) {
         if (eTarget) { eTarget.hp -= 1; if (eTarget.hp <= 0) killEnemyAt(col, ti); }
         if (p.rng() < 0.2) { state.core = Math.max(0, state.core - 1); log(`오물 반동! 코어 -1 (남은 ${state.core})`); }
         log(`오물 포션: 열${col + 1} 슬롯${ti >= 0 ? ti : '-'} -1`);
-        afterCastConsume(); updateUI(); return;
+        SAFE_afterCastConsume(); updateUI(); return;
     }
 
+    // 기본 타격(일본어는 요격 규칙)
     if (p.main !== 'Japanese') {
-        if (!eTarget) { log(`타깃 없음: 열${col + 1}에 전투 가능한 적이 없습니다.`); afterCastConsume(); updateUI(); return; }
+        if (!eTarget) { log(`타깃 없음: 열${col + 1}에 전투 가능한 적이 없습니다.`); SAFE_afterCastConsume(); updateUI(); return; }
         eTarget.hp -= p.baseDmg;
         log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 열${col + 1} 슬롯${anchorIdx} -${p.baseDmg} (HP ${Math.max(0, eTarget.hp)})`);
         if (eTarget.hp <= 0) killEnemyAt(col, anchorIdx);
@@ -472,13 +487,14 @@ function castPotionOnColumn(p, col) {
         log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 기본 타격은 요격 규칙으로 대체`);
     }
 
-    // ✅ 고정된 anchorIdx로 메인/보조 모두 호출
+    // 메인/보조 효과 실행(고정 anchorIdx 전달)
     applyMainEffect(p.main, col, p.baseDmg, p, anchorIdx);
     if (p.sub) applySubEffect(p.sub, col, p.baseDmg, p, anchorIdx);
 
-    afterCastConsume();
+    SAFE_afterCastConsume();
     updateUI();
 }
+
 
 /* ===== 메인 효과 ===== */
 function applyMainEffect(kind, col, base, p, combatIdx) {
@@ -553,7 +569,7 @@ function applyMainEffect(kind, col, base, p, combatIdx) {
     }
 }
 
-/* ===== 보조 효과 (Han에 fallback 추가, Latin 로그 정합) ===== */
+/* ===== 보조 효과 ===== */
 function applySubEffect(kind, col, base, p, combatIdx) {
     const lane = state.lanes[col];
 
@@ -581,11 +597,11 @@ function applySubEffect(kind, col, base, p, combatIdx) {
         }
 
     } else if (kind === 'Han') {
-        // ✅ combatIdx가 없으면 현재 전투구역 맨앞을 기준으로 대체
+        // ⚠️ combatIdx가 없을 수도 있으므로 전투구역 맨 앞을 폴백으로 사용
         const baseIdx = (combatIdx >= 0) ? combatIdx : getCombatIdx(lane);
-        if (baseIdx >= 0) {
-            const bi = baseIdx + 1;
-            if (p.rng() < 0.5 && bi >= 0 && bi < ROWS) {
+        if (baseIdx >= 0 && p.rng() < 0.5) {
+            const bi = baseIdx + 1;                 // 뒤 1칸
+            if (bi >= 0 && bi < ROWS) {
                 const be = lane.queue[bi];
                 if (be) {
                     be.hp -= base;
@@ -608,6 +624,7 @@ function applySubEffect(kind, col, base, p, combatIdx) {
         }
     }
 }
+
 
 
 /* ===== UI (Grid & Potion Panel) ===== */
