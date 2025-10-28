@@ -128,7 +128,7 @@ function makeEnemy(baseType, variant, rng) {
     return { type: baseType, variant, hp, dmg, badge, dot: null };
 }
 
-/* ★ 10라운드=보스 규칙 제거된 버전 */
+
 function pickEnemyType(wave, rng) {
     const baseElite = 0.10 + 0.02 * wave + state.stageMods.eliteBonus;
     const eliteProb = clamp(baseElite, 0, 0.6);
@@ -282,6 +282,23 @@ document.addEventListener('keydown', (e) => {
         bossJumpNextTurn();
     }
 });
+document.addEventListener('keydown', (e) => {
+    if (e.shiftKey && (e.key === '.' || e.key === '>')) {
+        const seed = fnv1a(`filltest|${state.stage}|${state.round}|${state.runSeed}`);
+        const rng = xorshift(seed);
+
+        for (let c = 0; c < MAX_COLS; c++) {
+            const lane = state.lanes[c];
+            for (let i = 0; i < COMBAT_ZONE.length; i++) {
+                const enemy = makeEnemy('basic', pickVariant(rng), rng);
+                lane.queue[i] = enemy;
+            }
+        }
+
+        updateUI();
+        log('◎ 테스트: 전투구역 전체를 적으로 채웠습니다.');
+    }
+});
 function endOfTurnResolve() {
     enemyAttackPhase();
     dotResolvePhase();
@@ -405,7 +422,6 @@ function makeSludge(joined, reason) {
 }
 
 /* ===== 포션 사용 ===== */
-/* ===== 포션 사용 (앵커 인덱스 스냅샷 추가) ===== */
 function castPotionOnColumn(p, col) {
     if (!p) return;
     if (state.usedThisTurn >= getPlaysPerTurn()) {
@@ -447,7 +463,7 @@ function castPotionOnColumn(p, col) {
     updateUI();
 }
 
-/* ===== 메인 효과 (네가 올린 최신 버전 그대로) ===== */
+/* ===== 메인 효과 ===== */
 function applyMainEffect(kind, col, base, p, combatIdx) {
     const lane = state.lanes[col];
 
@@ -915,7 +931,7 @@ document.getElementById('resetBtn').onclick = resetGame;
         listEl.innerHTML = '';
         let costSum = 0;
 
-        // state.relics에는 내부 보정용 엔트리(distill_bonus, hardened_shell_stage_heal)도 섞여 있을 수 있음.
+
         // 화면엔 "플레이어가 실제로 획득한 유물(id가 풀에 등록된 것)"만 보여주자.
         const visible = state.relics.filter(r => {
             // 풀 유물 id 집합과 매칭
