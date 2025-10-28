@@ -405,6 +405,7 @@ function makeSludge(joined, reason) {
 }
 
 /* ===== 포션 사용 ===== */
+/* ===== 포션 사용 (앵커 인덱스 스냅샷 추가) ===== */
 function castPotionOnColumn(p, col) {
     if (!p) return;
     if (state.usedThisTurn >= getPlaysPerTurn()) {
@@ -417,6 +418,11 @@ function castPotionOnColumn(p, col) {
     const lane = state.lanes[col];
     const { enemy: eTarget, idx: ti } = getCombatEnemy(lane);
 
+    // ✅ 메인/보조가 공유할 앵커 인덱스를 시전 직전에 고정
+    const anchorIdx = (p.main === 'Japanese')
+        ? getBackmostCombatIdx(lane)                      // 일본어: 전투구역의 뒤쪽
+        : (ti >= 0 ? ti : getCombatIdx(lane));            // 그 외: 전투구역의 맨 앞
+
     if (p.isSludge) {
         if (eTarget) { eTarget.hp -= 1; if (eTarget.hp <= 0) killEnemyAt(col, ti); }
         if (p.rng() < 0.2) { state.core = Math.max(0, state.core - 1); log(`오물 반동! 코어 -1 (남은 ${state.core})`); }
@@ -427,26 +433,21 @@ function castPotionOnColumn(p, col) {
     if (p.main !== 'Japanese') {
         if (!eTarget) { log(`타깃 없음: 열${col + 1}에 전투 가능한 적이 없습니다.`); afterCastConsume(); updateUI(); return; }
         eTarget.hp -= p.baseDmg;
-        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 열${col + 1} 슬롯${ti} -${p.baseDmg} (HP ${Math.max(0, eTarget.hp)})`);
-        if (eTarget.hp <= 0) killEnemyAt(col, ti);
+        log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 열${col + 1} 슬롯${anchorIdx} -${p.baseDmg} (HP ${Math.max(0, eTarget.hp)})`);
+        if (eTarget.hp <= 0) killEnemyAt(col, anchorIdx);
     } else {
         log(`${p.type} ${p.main}${p.sub ? '/' + p.sub : ''}: 기본 타격은 요격 규칙으로 대체`);
     }
 
-    applyMainEffect(p.main, col, p.baseDmg, p, ti);
-    if (p.sub) applySubEffect(p.sub, col, p.baseDmg, p, ti);
+    // ✅ 고정된 anchorIdx로 메인/보조 모두 호출
+    applyMainEffect(p.main, col, p.baseDmg, p, anchorIdx);
+    if (p.sub) applySubEffect(p.sub, col, p.baseDmg, p, anchorIdx);
 
     afterCastConsume();
     updateUI();
 }
-function afterCastConsume() {
-    state.usedThisTurn++;
-    if (state.turnPotions.length > 0) state.turnPotions.shift();
-    state.potion = state.turnPotions[0] || null;
-}
 
-/* ===== 메인 효과 ===== */
-// ===== 메인 효과 =====
+/* ===== 메인 효과 (네가 올린 최신 버전 그대로) ===== */
 function applyMainEffect(kind, col, base, p, combatIdx) {
     const lane = state.lanes[col];
 
@@ -478,12 +479,9 @@ function applyMainEffect(kind, col, base, p, combatIdx) {
     }
 
     if (kind === 'Han') {
-        // 좌/우 열 전투타깃에 기본피해
         for (const dc of [-1, +1]) {
             const cc = col + dc;
             if (cc < 0 || cc >= MAX_COLS) continue;
-
-            // 전투구역(0~2) 중 맨 앞 우선
             const ni = getCombatIdx(state.lanes[cc]);
             if (ni >= 0) {
                 const ne = state.lanes[cc].queue[ni];
@@ -492,28 +490,18 @@ function applyMainEffect(kind, col, base, p, combatIdx) {
                     log(`한자 확산(좌/우): 열${cc + 1} 슬롯${ni} -${base} (HP ${Math.max(0, ne.hp)})`);
                     if (ne.hp <= 0) killEnemyAt(cc, ni);
                 }
-            } else {
-                // 디버깅 보조: 전투구역에 적이 없으면 스펙상 미적용
-                // log(`한자 확산(좌/우) 스킵: 열${cc + 1} 전투구역에 적 없음`);
             }
         }
-
-        // 같은 열의 "타깃 바로 뒤 1칸"에도 동일 피해
-        // combatIdx는 "타격 당시"의 위치를 그대로 사용 (이미 처치되어도 인덱스는 고정)
         if (combatIdx >= 0) {
-            const bi = combatIdx + 1; // 뒤 1칸
+            const bi = combatIdx + 1;
             if (bi < ROWS) {
                 const be = lane.queue[bi];
                 if (be) {
                     be.hp -= base;
                     log(`한자 추가(후열): 열${col + 1} 슬롯${bi} -${base} (HP ${Math.max(0, be.hp)})`);
                     if (be.hp <= 0) killEnemyAt(col, bi);
-                } else {
-                    // log(`한자 추가(후열) 스킵: 열${col + 1} 슬롯${bi} 비어있음`);
                 }
             }
-        } else {
-            // log(`한자 추가(후열) 스킵: combatIdx 미확정`);
         }
         return;
     }
@@ -532,8 +520,7 @@ function applyMainEffect(kind, col, base, p, combatIdx) {
     }
 }
 
-
-/* ===== 보조 효과 ===== */
+/* ===== 보조 효과 (Han에 fallback 추가, Latin 로그 정합) ===== */
 function applySubEffect(kind, col, base, p, combatIdx) {
     const lane = state.lanes[col];
 
@@ -556,16 +543,15 @@ function applySubEffect(kind, col, base, p, combatIdx) {
             const e = lane.queue[idx];
             if (e) {
                 e.dot = { value: 1, turns: 2 };
-
                 log(`보조(라틴) DOT1x2T (30%) @열${col + 1}/슬롯${idx}`);
-
             }
         }
 
     } else if (kind === 'Han') {
-        // 
-        if (combatIdx >= 0) {
-            const bi = combatIdx + 1;
+        // ✅ combatIdx가 없으면 현재 전투구역 맨앞을 기준으로 대체
+        const baseIdx = (combatIdx >= 0) ? combatIdx : getCombatIdx(lane);
+        if (baseIdx >= 0) {
+            const bi = baseIdx + 1;
             if (p.rng() < 0.5 && bi >= 0 && bi < ROWS) {
                 const be = lane.queue[bi];
                 if (be) {
@@ -574,8 +560,6 @@ function applySubEffect(kind, col, base, p, combatIdx) {
                     if (be.hp <= 0) killEnemyAt(col, bi);
                 }
             }
-        } else {
-
         }
 
     } else if (kind === 'Japanese') {
