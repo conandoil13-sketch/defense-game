@@ -420,7 +420,24 @@ function makeSludge(joined, reason) {
     const seedBase = fnv1a(joined) ^ (state.round * 2654435761 >>> 0) ^ state.runSeed ^ (state.stage * 0x9e3779b9);
     return { seed: seedBase, rng: xorshift(seedBase), main: 'Sludge', sub: null, type: '오물', cost: 1, baseDmg: 1, isSludge: true, desc: `오물 포션 (${reason}) — 피해 1, 20% 자해/잠금(프로토타입)` };
 }
+/* ===== 포션 사용 전 공통 소비 처리 ===== */
 
+function afterCastConsume() {
+    // 이 턴 사용 카운트 증가
+    state.usedThisTurn = (state.usedThisTurn || 0) + 1;
+
+    // 대기 중 포션 큐에서 1장 소모
+    if (Array.isArray(state.turnPotions) && state.turnPotions.length > 0) {
+        state.turnPotions.shift();
+    }
+
+    // 다음 사용할 포션 업데이트
+    state.potion = (state.turnPotions && state.turnPotions[0]) || null;
+}
+
+if (typeof window !== 'undefined') {
+    window.afterCastConsume = afterCastConsume;
+}
 /* ===== 포션 사용 ===== */
 function castPotionOnColumn(p, col) {
     if (!p) return;
